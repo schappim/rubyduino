@@ -1,39 +1,72 @@
+<div align="center">
+
 # Rubyduino
 
-TODO: Delete this and the text below, and describe your gem
+<img width="250" height="250" alt="image copy" src="https://github.com/user-attachments/assets/156c7d41-ed42-43f3-a720-ed2e9c12b52c" />
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/rubyduino`. To experiment with that code, run `bin/console` for an interactive prompt.
+Rubyduino compiles Ruby sketches for Arduino boards and uploads the generated firmware.
+
+Under the hood it uses [Spinel](https://github.com/matz/spinel), a Ruby AOT compiler, vendored at a pinned revision.
+
+</div>
+
+## Example
+
+<img width="500" height="281" alt="IMG_0197" src="https://github.com/user-attachments/assets/d2b1cc69-647a-4f63-b090-31b13a21e5a8" />
+
+```ruby
+system("pin13:output")
+
+loop do
+  duration = 0.1
+  system("pin13:high")
+  sleep duration
+  system("pin13:low")
+  sleep duration
+end
+```
+
+Not bad, huh?
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
 ```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+gem install rubyduino
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+The command expects the AVR toolchain to be available in `PATH`, including `avr-gcc`, `avr-objcopy`, and `avrdude`.
+
+On macOS, install the AVR tools with Homebrew:
 
 ```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+brew tap osx-cross/avr
+brew install avr-gcc avrdude
+```
+
+On Debian/Ubuntu:
+
+```bash
+sudo apt install gcc-avr avr-libc avrdude
+```
+
+On Fedora:
+
+```bash
+sudo dnf install avr-gcc avr-libc avrdude
 ```
 
 ## Usage
 
-TODO: Write usage instructions here
+```bash
+rubyduino examples/hello.rb
+```
 
-## Development
+Pass a serial port explicitly when auto-detection is not enough:
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/rubyduino.
+```bash
+rubyduino -p /dev/cu.usbmodem11401 examples/hello.rb
+```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT
