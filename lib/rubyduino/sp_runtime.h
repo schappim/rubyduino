@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
 #include <util/delay_basic.h>
@@ -43,6 +44,23 @@ static void *sp_gc_alloc(size_t size, void (*free_func)(void *), sp_gc_scan_func
 
 static void sp_gc_mark(void *ptr) {
   (void)ptr;
+}
+
+static inline mrb_int sp_idiv(mrb_int a, mrb_int b) {
+  mrb_int q;
+  mrb_int r;
+
+  if (b == 0) {
+    return 0;
+  }
+
+  q = a / b;
+  r = a % b;
+  if ((r != 0) && ((r ^ b) < 0)) {
+    q--;
+  }
+
+  return q;
 }
 
 typedef struct {
@@ -118,6 +136,25 @@ static mrb_int sp_FloatArray_length(sp_FloatArray *array) {
 
 static mrb_float sp_FloatArray_get(sp_FloatArray *array, mrb_int index) {
   return array->data[index];
+}
+
+static volatile uint32_t rd_uno_timer0_overflows = 0;
+static uint8_t rd_uno_timer0_ready = 0;
+
+ISR(TIMER0_OVF_vect) {
+  rd_uno_timer0_overflows++;
+}
+
+static void rd_uno_timer0_init(void) {
+  if (rd_uno_timer0_ready) {
+    return;
+  }
+
+  TCCR0A |= (uint8_t)((1 << WGM00) | (1 << WGM01));
+  TCCR0B = (uint8_t)((TCCR0B & (uint8_t)~((1 << CS02) | (1 << CS01) | (1 << CS00))) | (1 << CS01) | (1 << CS00));
+  TIMSK0 |= (uint8_t)(1 << TOIE0);
+  rd_uno_timer0_ready = 1;
+  sei();
 }
 
 static int rd_uno_valid_pin(uint8_t pin) {
@@ -254,6 +291,60 @@ int analog_read(uint8_t pin) {
   return ADC;
 }
 
+int analog_write(uint8_t pin, uint8_t value) {
+  if (!rd_uno_valid_pin(pin)) {
+    return 1;
+  }
+
+  pin_mode(pin, 1);
+
+  if (value == 0) {
+    return digital_write(pin, 0);
+  }
+  if (value == 255) {
+    return digital_write(pin, 1);
+  }
+
+  if (pin == 5) {
+    rd_uno_timer0_init();
+    TCCR0A |= (uint8_t)(1 << COM0B1);
+    OCR0B = value;
+    return 0;
+  }
+  if (pin == 6) {
+    rd_uno_timer0_init();
+    TCCR0A |= (uint8_t)(1 << COM0A1);
+    OCR0A = value;
+    return 0;
+  }
+  if (pin == 9) {
+    TCCR1A |= (uint8_t)((1 << WGM10) | (1 << COM1A1));
+    TCCR1B = (uint8_t)((TCCR1B & (uint8_t)~((1 << CS12) | (1 << CS11) | (1 << CS10) | (1 << WGM13))) | (1 << WGM12) | (1 << CS11) | (1 << CS10));
+    OCR1A = value;
+    return 0;
+  }
+  if (pin == 10) {
+    TCCR1A |= (uint8_t)((1 << WGM10) | (1 << COM1B1));
+    TCCR1B = (uint8_t)((TCCR1B & (uint8_t)~((1 << CS12) | (1 << CS11) | (1 << CS10) | (1 << WGM13))) | (1 << WGM12) | (1 << CS11) | (1 << CS10));
+    OCR1B = value;
+    return 0;
+  }
+  if (pin == 3) {
+    TCCR2A |= (uint8_t)((1 << WGM20) | (1 << WGM21) | (1 << COM2B1));
+    TCCR2B = (uint8_t)((TCCR2B & (uint8_t)~((1 << CS22) | (1 << CS21) | (1 << CS20))) | (1 << CS22));
+    OCR2B = value;
+    return 0;
+  }
+  if (pin == 11) {
+    TCCR2A |= (uint8_t)((1 << WGM20) | (1 << WGM21) | (1 << COM2A1));
+    TCCR2B = (uint8_t)((TCCR2B & (uint8_t)~((1 << CS22) | (1 << CS21) | (1 << CS20))) | (1 << CS22));
+    OCR2A = value;
+    return 0;
+  }
+
+  return digital_write(pin, value < 128 ? 0 : 1);
+}
+
 static void sp_arduino_delay_ms(unsigned long ms) {
   while (ms > 0) {
     _delay_loop_2((uint16_t)(F_CPU / 4000UL));
@@ -263,6 +354,193 @@ static void sp_arduino_delay_ms(unsigned long ms) {
 
 void delay_ms(uint32_t ms) {
   sp_arduino_delay_ms(ms);
+}
+
+void delay_us(uint32_t us) {
+  while (us > 0) {
+    _delay_us(1.0);
+    us--;
+  }
+}
+
+uint32_t micros(void) {
+  uint32_t overflows;
+  uint8_t counter;
+  uint8_t flags;
+  uint8_t sreg;
+
+  rd_uno_timer0_init();
+
+  sreg = SREG;
+  cli();
+  overflows = rd_uno_timer0_overflows;
+  counter = TCNT0;
+  flags = TIFR0;
+  if ((flags & (uint8_t)(1 << TOV0)) && counter < 255) {
+    overflows++;
+  }
+  SREG = sreg;
+
+  return ((overflows << 8) + counter) * (uint32_t)(64UL / (F_CPU / 1000000UL));
+}
+
+uint32_t millis(void) {
+  return micros() / 1000UL;
+}
+
+uint32_t pulse_in_timeout(uint8_t pin, uint8_t value, uint32_t timeout_us) {
+  uint32_t start;
+  uint32_t pulse_start;
+  uint32_t width;
+
+  if (!rd_uno_valid_pin(pin)) {
+    return 0;
+  }
+
+  value = value ? 1 : 0;
+  start = micros();
+
+  while (digital_read(pin) == value) {
+    if ((micros() - start) >= timeout_us) {
+      return 0;
+    }
+  }
+
+  while (digital_read(pin) != value) {
+    if ((micros() - start) >= timeout_us) {
+      return 0;
+    }
+  }
+
+  pulse_start = micros();
+
+  while (digital_read(pin) == value) {
+    width = micros() - pulse_start;
+    if ((micros() - start) >= timeout_us) {
+      return 0;
+    }
+  }
+
+  return micros() - pulse_start;
+}
+
+uint32_t pulse_in(uint8_t pin, uint8_t value) {
+  return pulse_in_timeout(pin, value, 1000000UL);
+}
+
+void serial_begin(uint32_t baud) {
+  uint16_t ubrr;
+
+  if (baud == 0) {
+    return;
+  }
+
+  ubrr = (uint16_t)((F_CPU / 16UL / baud) - 1UL);
+  UBRR0H = (uint8_t)(ubrr >> 8);
+  UBRR0L = (uint8_t)ubrr;
+  UCSR0A = 0;
+  UCSR0B = (uint8_t)((1 << RXEN0) | (1 << TXEN0));
+  UCSR0C = (uint8_t)((1 << UCSZ01) | (1 << UCSZ00));
+}
+
+int serial_available(void) {
+  return (UCSR0A & (uint8_t)(1 << RXC0)) ? 1 : 0;
+}
+
+int serial_read(void) {
+  if (!serial_available()) {
+    return -1;
+  }
+  return UDR0;
+}
+
+void serial_write(uint8_t value) {
+  while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
+  }
+  UDR0 = value;
+}
+
+void serial_print_str(const char *value) {
+  while (*value) {
+    serial_write((uint8_t)*value);
+    value++;
+  }
+}
+
+void serial_print_int(int value) {
+  char buf[12];
+  char *p = &buf[11];
+  unsigned int n;
+
+  *p = '\0';
+  if (value < 0) {
+    serial_write((uint8_t)'-');
+    n = (unsigned int)(-value);
+  } else {
+    n = (unsigned int)value;
+  }
+
+  do {
+    p--;
+    *p = (char)('0' + (n % 10));
+    n /= 10;
+  } while (n > 0);
+
+  serial_print_str(p);
+}
+
+void serial_println_str(const char *value) {
+  serial_print_str(value);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+void serial_println_int(int value) {
+  serial_print_int(value);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+uint8_t shift_in(uint8_t data_pin, uint8_t clock_pin, uint8_t bit_order) {
+  uint8_t value = 0;
+  uint8_t i;
+
+  for (i = 0; i < 8; i++) {
+    digital_write(clock_pin, 1);
+    if (bit_order == 0) {
+      value |= (uint8_t)(digital_read(data_pin) << i);
+    } else {
+      value |= (uint8_t)(digital_read(data_pin) << (7 - i));
+    }
+    digital_write(clock_pin, 0);
+  }
+
+  return value;
+}
+
+void shift_out(uint8_t data_pin, uint8_t clock_pin, uint8_t bit_order, uint8_t value) {
+  uint8_t i;
+  uint8_t bit;
+
+  for (i = 0; i < 8; i++) {
+    if (bit_order == 0) {
+      bit = (uint8_t)((value >> i) & 1);
+    } else {
+      bit = (uint8_t)((value >> (7 - i)) & 1);
+    }
+
+    digital_write(data_pin, bit);
+    digital_write(clock_pin, 1);
+    digital_write(clock_pin, 0);
+  }
+}
+
+void interrupts(void) {
+  sei();
+}
+
+void no_interrupts(void) {
+  cli();
 }
 
 #define fflush(stream) ((void)0)

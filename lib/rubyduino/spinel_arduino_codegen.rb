@@ -31,12 +31,42 @@ module SpinelArduinoCodegen
       return arduino_rand if arduino_rand
 
       super
+    when "serial_print"
+      arduino_serial_print = compile_arduino_serial_print(nid, false)
+      return arduino_serial_print if arduino_serial_print
+
+      super
+    when "serial_println"
+      arduino_serial_print = compile_arduino_serial_print(nid, true)
+      return arduino_serial_print if arduino_serial_print
+
+      super
     else
       super
     end
   end
 
   private
+
+  def compile_arduino_serial_print(nid, newline)
+    args_id = @nd_arguments[nid]
+    return nil if args_id < 0
+
+    arg_ids = get_args(args_id)
+    return nil unless arg_ids.length == 1
+
+    arg = arg_ids.first
+    fn = arduino_serial_print_func(arg, newline)
+    "(" + fn + "(" + compile_expr(arg) + "), (mrb_int)0)"
+  end
+
+  def arduino_serial_print_func(arg, newline)
+    if infer_type(arg) == "string"
+      return newline ? "serial_println_str" : "serial_print_str"
+    end
+
+    newline ? "serial_println_int" : "serial_print_int"
+  end
 
   def compile_arduino_rand(nid)
     args_id = @nd_arguments[nid]

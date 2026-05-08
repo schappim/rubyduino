@@ -14,12 +14,32 @@ module ArduinoUNO
   A5 = 19
 
   LED_BUILTIN = 13
+  LSBFIRST = 0
+  MSBFIRST = 1
 
   ffi_func :pin_mode, [:uint8, :uint8], :int
   ffi_func :digital_write, [:uint8, :uint8], :int
   ffi_func :digital_read, [:uint8], :int
   ffi_func :analog_read, [:uint8], :int
+  ffi_func :analog_write, [:uint8, :uint8], :int
   ffi_func :delay_ms, [:uint32], :void
+  ffi_func :delay_us, [:uint32], :void
+  ffi_func :millis, [], :uint32
+  ffi_func :micros, [], :uint32
+  ffi_func :pulse_in, [:uint8, :uint8], :uint32
+  ffi_func :pulse_in_timeout, [:uint8, :uint8, :uint32], :uint32
+  ffi_func :serial_begin, [:uint32], :void
+  ffi_func :serial_available, [], :int
+  ffi_func :serial_read, [], :int
+  ffi_func :serial_write, [:uint8], :void
+  ffi_func :serial_print_str, [:str], :void
+  ffi_func :serial_print_int, [:int], :void
+  ffi_func :serial_println_str, [:str], :void
+  ffi_func :serial_println_int, [:int], :void
+  ffi_func :shift_in, [:uint8, :uint8, :uint8], :uint8
+  ffi_func :shift_out, [:uint8, :uint8, :uint8, :uint8], :void
+  ffi_func :interrupts, [], :void
+  ffi_func :no_interrupts, [], :void
 end
 
 def pin_mode(pin, mode)
@@ -38,6 +58,62 @@ def analog_read(pin)
   ArduinoUNO.analog_read(pin)
 end
 
+def analog_write(pin, value)
+  ArduinoUNO.analog_write(pin, value)
+end
+
 def delay_ms(ms)
   ArduinoUNO.delay_ms(ms)
+end
+
+def delay_us(us)
+  ArduinoUNO.delay_us(us)
+end
+
+def millis
+  ArduinoUNO.millis
+end
+
+def micros
+  ArduinoUNO.micros
+end
+
+def pulse_in(pin, value)
+  ArduinoUNO.pulse_in(pin, value)
+end
+
+def pulse_in_timeout(pin, value, timeout_us)
+  ArduinoUNO.pulse_in_timeout(pin, value, timeout_us)
+end
+
+def serial_begin(baud)
+  ArduinoUNO.serial_begin(baud)
+end
+
+def serial_available
+  ArduinoUNO.serial_available
+end
+
+def serial_read
+  ArduinoUNO.serial_read
+end
+
+def serial_write(value)
+  ArduinoUNO.serial_write(value)
+end
+
+def shift_in(data_pin, clock_pin, bit_order)
+  ArduinoUNO.shift_in(data_pin, clock_pin, bit_order)
+end
+
+def shift_out(data_pin, clock_pin, bit_order, value)
+  ArduinoUNO.shift_out(data_pin, clock_pin, bit_order, value)
+end
+
+def interrupts
+  ArduinoUNO.interrupts
+end
+
+def no_interrupts
+  ArduinoUNO.no_interrupts
 end
