@@ -7,3 +7,7 @@
 ## [0.1.1] - 2026-05-08
 
 - Fix avrdude discovery for installed command
+
+## [0.1.2] - 2026-05-08
+
+- Update vendored Spinel revision
