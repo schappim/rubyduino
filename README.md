@@ -16,14 +16,13 @@ Under the hood it uses [Spinel](https://github.com/matz/spinel), a Ruby AOT comp
 <img width="500" height="281" alt="IMG_0197" src="https://github.com/user-attachments/assets/d2b1cc69-647a-4f63-b090-31b13a21e5a8" />
 
 ```ruby
-system("pin13:output")
+pin_mode(ArduinoUNO::LED_BUILTIN, ArduinoUNO::OUTPUT)
 
 loop do
-  duration = 0.1
-  system("pin13:high")
-  sleep duration
-  system("pin13:low")
-  sleep duration
+  digital_write(ArduinoUNO::LED_BUILTIN, ArduinoUNO::HIGH)
+  delay_ms(100)
+  digital_write(ArduinoUNO::LED_BUILTIN, ArduinoUNO::LOW)
+  delay_ms(100)
 end
 ```
 

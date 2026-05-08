@@ -98,6 +98,7 @@ rubyduino_dir = File.join(root_dir, "lib/rubyduino")
 parse_bin = File.join(spinel_dir, "spinel_parse")
 codegen_rb = File.join(rubyduino_dir, "spinel_arduino_codegen.rb")
 entry_c = File.join(rubyduino_dir, "arduino_entry.c")
+arduino_uno_rb = File.join(rubyduino_dir, "arduino_uno.rb")
 
 mcu = "atmega328p"
 f_cpu = "16000000UL"
@@ -137,6 +138,7 @@ abort "rubyduino: #{source}: No such file" unless File.file?(source)
 abort "rubyduino: missing Spinel checkout at #{spinel_dir}" unless Dir.exist?(spinel_dir)
 abort "rubyduino: missing #{codegen_rb}" unless File.file?(codegen_rb)
 abort "rubyduino: missing #{entry_c}" unless File.file?(entry_c)
+abort "rubyduino: missing #{arduino_uno_rb}" unless File.file?(arduino_uno_rb)
 abort "rubyduino: avr-gcc not found" unless command?("avr-gcc")
 abort "rubyduino: avr-objcopy not found" unless command?("avr-objcopy")
 
@@ -164,9 +166,11 @@ avrdude = find_avrdude
 abort "rubyduino: avrdude not found" unless avrdude
 
 ast_tmp = File.join(Dir.tmpdir, "spinel_arduino_ast.#{$PROCESS_ID}.#{rand(1_000_000)}")
+source_tmp = File.join(Dir.tmpdir, "rubyduino_source.#{$PROCESS_ID}.#{rand(1_000_000)}.rb")
 begin
   warn "Spinel: #{source} -> #{c_file}"
-  run!(parse_bin, source, ast_tmp)
+  File.write(source_tmp, "#{File.read(arduino_uno_rb)}\n#{File.read(source)}")
+  run!(parse_bin, source_tmp, ast_tmp)
   run!(RbConfig.ruby, codegen_rb, ast_tmp, c_file)
 
   warn "AVR: #{c_file} -> #{hex_file}"
@@ -183,4 +187,5 @@ begin
   run!(avrdude, *conf_args, "-p#{mcu}", "-carduino", "-P#{port}", "-b#{baud}", "-D", "-Uflash:w:#{hex_file}:i")
 ensure
   FileUtils.rm_f(ast_tmp)
+  FileUtils.rm_f(source_tmp)
 end

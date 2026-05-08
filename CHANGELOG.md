@@ -1,13 +1,19 @@
 ## [Unreleased]
 
-## [0.1.0] - 2026-05-08
+## [0.1.3] - 2026-05-08
 
-- Initial release
+- Add the built-in `ArduinoUNO` prelude with FFI-backed GPIO, analog read, and millisecond delay bindings
+- Replace the legacy `system("pin13:*")` sketch API with top-level helpers like `pin_mode`, `digital_write`, and `delay_ms`
+- Update the default hello example to use the new ArduinoUNO API
+
+## [0.1.2] - 2026-05-08
+
+- Update vendored Spinel revision
 
 ## [0.1.1] - 2026-05-08
 
 - Fix avrdude discovery for installed command
 
-## [0.1.2] - 2026-05-08
+## [0.1.0] - 2026-05-08
 
-- Update vendored Spinel revision
+- Initial release

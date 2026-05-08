@@ -26,9 +26,6 @@ load_spinel_compiler
 module SpinelArduinoCodegen
   def compile_no_recv_call_expr(nid, mname)
     case mname
-    when "sleep"
-      compile_arduino_sleep(nid)
-      "0"
     when "rand"
       arduino_rand = compile_arduino_rand(nid)
       return arduino_rand if arduino_rand
@@ -40,21 +37,6 @@ module SpinelArduinoCodegen
   end
 
   private
-
-  def compile_arduino_sleep(nid)
-    args_id = @nd_arguments[nid]
-    return if args_id < 0
-
-    arg_ids = get_args(args_id)
-    return if arg_ids.empty?
-
-    arg = arg_ids.first
-    if numeric_literal_node?(arg)
-      emit_arduino_delay_literal(numeric_literal_value(arg))
-    else
-      emit("  sp_arduino_sleep_seconds(" + compile_expr(arg) + ");")
-    end
-  end
 
   def compile_arduino_rand(nid)
     args_id = @nd_arguments[nid]
@@ -79,31 +61,8 @@ module SpinelArduinoCodegen
     "((mrb_int)(#{first} + (rand() % #{span})))"
   end
 
-  def emit_arduino_delay_literal(seconds)
-    ms = (seconds * 1000.0).round
-    parts = []
-    while ms >= 250
-      parts << "_delay_ms(250.0)"
-      ms -= 250
-    end
-    parts << "_delay_ms(#{ms}.0)" if ms > 0
-    emit("  " + parts.join("; ") + ";") unless parts.empty?
-  end
-
   def integer_literal_node?(nid)
     nid && nid >= 0 && @nd_type[nid] == "IntegerNode"
-  end
-
-  def numeric_literal_node?(nid)
-    nid && nid >= 0 && %w[IntegerNode FloatNode].include?(@nd_type[nid])
-  end
-
-  def numeric_literal_value(nid)
-    if @nd_type[nid] == "IntegerNode"
-      @nd_value[nid].to_f
-    else
-      @nd_content[nid].to_f
-    end
   end
 end
 

@@ -1,9 +1,8 @@
-system("pin13:output")
+pin_mode(ArduinoUNO::LED_BUILTIN, ArduinoUNO::OUTPUT)
 
 loop do
-  duration = 0.1
-  system("pin13:high")
-  sleep duration
-  system("pin13:low")
-  sleep duration
+  digital_write(ArduinoUNO::LED_BUILTIN, ArduinoUNO::HIGH)
+  delay_ms(100)
+  digital_write(ArduinoUNO::LED_BUILTIN, ArduinoUNO::LOW)
+  delay_ms(100)
 end
