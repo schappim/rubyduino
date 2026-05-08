@@ -1,0 +1,15 @@
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+/*.gem
+
+# Rubyduino build artifacts
+/examples/*.c
+/examples/*.elf
+/examples/*.hex
+/examples/*.o
