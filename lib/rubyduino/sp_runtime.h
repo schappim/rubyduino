@@ -596,6 +596,61 @@ int32_t sq(int32_t value) {
   return value * value;
 }
 
+int is_alpha(int c) {
+  return ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) ? 1 : 0;
+}
+
+int is_digit(int c) {
+  return (c >= '0' && c <= '9') ? 1 : 0;
+}
+
+int is_alpha_numeric(int c) {
+  return (is_alpha(c) || is_digit(c)) ? 1 : 0;
+}
+
+int is_space(int c) {
+  return (c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r') ? 1 : 0;
+}
+
+int is_whitespace(int c) {
+  return (c == ' ' || c == '\t') ? 1 : 0;
+}
+
+int is_upper_case(int c) {
+  return (c >= 'A' && c <= 'Z') ? 1 : 0;
+}
+
+int is_lower_case(int c) {
+  return (c >= 'a' && c <= 'z') ? 1 : 0;
+}
+
+int is_ascii(int c) {
+  return (c >= 0 && c <= 127) ? 1 : 0;
+}
+
+int is_control(int c) {
+  return ((c >= 0 && c <= 31) || c == 127) ? 1 : 0;
+}
+
+int is_printable(int c) {
+  return (c >= 32 && c <= 126) ? 1 : 0;
+}
+
+int is_punct(int c) {
+  if (c >= '!' && c <= '/') return 1;
+  if (c >= ':' && c <= '@') return 1;
+  if (c >= '[' && c <= '`') return 1;
+  if (c >= '{' && c <= '~') return 1;
+  return 0;
+}
+
+int is_hexadecimal_digit(int c) {
+  if (c >= '0' && c <= '9') return 1;
+  if (c >= 'a' && c <= 'f') return 1;
+  if (c >= 'A' && c <= 'F') return 1;
+  return 0;
+}
+
 #define fflush(stream) ((void)0)
 
 #endif

@@ -50,6 +50,18 @@ module ArduinoUNO
   ffi_func :map_value, [:int32, :int32, :int32, :int32, :int32], :int32
   ffi_func :constrain, [:int32, :int32, :int32], :int32
   ffi_func :sq, [:int32], :int32
+  ffi_func :is_alpha, [:int], :int
+  ffi_func :is_digit, [:int], :int
+  ffi_func :is_alpha_numeric, [:int], :int
+  ffi_func :is_space, [:int], :int
+  ffi_func :is_whitespace, [:int], :int
+  ffi_func :is_upper_case, [:int], :int
+  ffi_func :is_lower_case, [:int], :int
+  ffi_func :is_ascii, [:int], :int
+  ffi_func :is_control, [:int], :int
+  ffi_func :is_printable, [:int], :int
+  ffi_func :is_punct, [:int], :int
+  ffi_func :is_hexadecimal_digit, [:int], :int
 end
 
 def pin_mode(pin, mode)
@@ -166,4 +178,52 @@ end
 
 def sq(value)
   ArduinoUNO.sq(value)
+end
+
+def is_alpha(c)
+  ArduinoUNO.is_alpha(c)
+end
+
+def is_digit(c)
+  ArduinoUNO.is_digit(c)
+end
+
+def is_alpha_numeric(c)
+  ArduinoUNO.is_alpha_numeric(c)
+end
+
+def is_space(c)
+  ArduinoUNO.is_space(c)
+end
+
+def is_whitespace(c)
+  ArduinoUNO.is_whitespace(c)
+end
+
+def is_upper_case(c)
+  ArduinoUNO.is_upper_case(c)
+end
+
+def is_lower_case(c)
+  ArduinoUNO.is_lower_case(c)
+end
+
+def is_ascii(c)
+  ArduinoUNO.is_ascii(c)
+end
+
+def is_control(c)
+  ArduinoUNO.is_control(c)
+end
+
+def is_printable(c)
+  ArduinoUNO.is_printable(c)
+end
+
+def is_punct(c)
+  ArduinoUNO.is_punct(c)
+end
+
+def is_hexadecimal_digit(c)
+  ArduinoUNO.is_hexadecimal_digit(c)
 end
