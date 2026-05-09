@@ -130,6 +130,15 @@ module ArduinoUNO
   ffi_func :spi_set_data_mode, [:uint8], :void
   ffi_func :spi_transfer, [:uint8], :uint8
   ffi_func :spi_transfer16, [:uint16], :uint16
+  ffi_func :wire_begin, [], :void
+  ffi_func :wire_end, [], :void
+  ffi_func :wire_set_clock, [:uint32], :void
+  ffi_func :wire_begin_transmission, [:uint8], :void
+  ffi_func :wire_write, [:uint8], :uint8
+  ffi_func :wire_end_transmission, [:uint8], :uint8
+  ffi_func :wire_request_from, [:uint8, :uint8, :uint8], :uint8
+  ffi_func :wire_available, [], :int
+  ffi_func :wire_read, [], :int
 end
 
 def pin_mode(pin, mode)
@@ -526,4 +535,40 @@ end
 
 def spi_transfer16(word)
   ArduinoUNO.spi_transfer16(word)
+end
+
+def wire_begin
+  ArduinoUNO.wire_begin
+end
+
+def wire_end
+  ArduinoUNO.wire_end
+end
+
+def wire_set_clock(speed_hz)
+  ArduinoUNO.wire_set_clock(speed_hz)
+end
+
+def wire_begin_transmission(addr)
+  ArduinoUNO.wire_begin_transmission(addr)
+end
+
+def wire_write(byte)
+  ArduinoUNO.wire_write(byte)
+end
+
+def wire_end_transmission(stop = 1)
+  ArduinoUNO.wire_end_transmission(stop)
+end
+
+def wire_request_from(addr, count, stop = 1)
+  ArduinoUNO.wire_request_from(addr, count, stop)
+end
+
+def wire_available
+  ArduinoUNO.wire_available
+end
+
+def wire_read
+  ArduinoUNO.wire_read
 end

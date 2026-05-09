@@ -917,6 +917,189 @@ uint16_t spi_transfer16(uint16_t value) {
   return (uint16_t)(((uint16_t)hi << 8) | lo);
 }
 
+#define RD_WIRE_BUF_LEN 32
+
+static uint8_t rd_wire_tx_buf[RD_WIRE_BUF_LEN];
+static uint8_t rd_wire_tx_len = 0;
+static uint8_t rd_wire_tx_addr = 0;
+
+static uint8_t rd_wire_rx_buf[RD_WIRE_BUF_LEN];
+static uint8_t rd_wire_rx_len = 0;
+static uint8_t rd_wire_rx_pos = 0;
+
+static int rd_wire_wait_twint(void) {
+  uint16_t spin = 0;
+  while (!(TWCR & (uint8_t)(1 << TWINT))) {
+    spin++;
+    if (spin > 30000) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static uint8_t rd_wire_status(void) {
+  return (uint8_t)(TWSR & 0xF8);
+}
+
+static int rd_wire_start(void) {
+  TWCR = (uint8_t)((1 << TWINT) | (1 << TWSTA) | (1 << TWEN));
+  return rd_wire_wait_twint();
+}
+
+static void rd_wire_stop(void) {
+  TWCR = (uint8_t)((1 << TWINT) | (1 << TWSTO) | (1 << TWEN));
+  /* Wait for STOP to clear (TWSTO goes low). */
+  while (TWCR & (uint8_t)(1 << TWSTO)) {
+  }
+}
+
+static int rd_wire_send_byte(uint8_t byte) {
+  TWDR = byte;
+  TWCR = (uint8_t)((1 << TWINT) | (1 << TWEN));
+  return rd_wire_wait_twint();
+}
+
+static int rd_wire_recv_byte(uint8_t ack) {
+  if (ack) {
+    TWCR = (uint8_t)((1 << TWINT) | (1 << TWEN) | (1 << TWEA));
+  } else {
+    TWCR = (uint8_t)((1 << TWINT) | (1 << TWEN));
+  }
+  return rd_wire_wait_twint();
+}
+
+void wire_begin(void) {
+  TWSR = 0;
+  TWBR = (uint8_t)(((F_CPU / 100000UL) - 16UL) / 2UL);
+  TWCR = (uint8_t)(1 << TWEN);
+}
+
+void wire_end(void) {
+  TWCR = 0;
+}
+
+void wire_set_clock(uint32_t speed_hz) {
+  if (speed_hz == 0) {
+    return;
+  }
+  TWSR = 0;
+  TWBR = (uint8_t)(((F_CPU / speed_hz) - 16UL) / 2UL);
+}
+
+void wire_begin_transmission(uint8_t addr) {
+  rd_wire_tx_addr = addr;
+  rd_wire_tx_len = 0;
+}
+
+uint8_t wire_write(uint8_t byte) {
+  if (rd_wire_tx_len >= RD_WIRE_BUF_LEN) {
+    return 0;
+  }
+  rd_wire_tx_buf[rd_wire_tx_len++] = byte;
+  return 1;
+}
+
+uint8_t wire_end_transmission(uint8_t stop) {
+  uint8_t i;
+
+  if (!rd_wire_start()) {
+    return 4;
+  }
+  if (rd_wire_status() != 0x08 && rd_wire_status() != 0x10) {
+    rd_wire_stop();
+    return 4;
+  }
+
+  if (!rd_wire_send_byte((uint8_t)((rd_wire_tx_addr << 1) & 0xFE))) {
+    rd_wire_stop();
+    return 4;
+  }
+  if (rd_wire_status() != 0x18) {
+    /* SLA+W not acknowledged. */
+    rd_wire_stop();
+    return 2;
+  }
+
+  for (i = 0; i < rd_wire_tx_len; i++) {
+    if (!rd_wire_send_byte(rd_wire_tx_buf[i])) {
+      rd_wire_stop();
+      return 4;
+    }
+    if (rd_wire_status() != 0x28) {
+      /* data NACK */
+      rd_wire_stop();
+      return 3;
+    }
+  }
+
+  if (stop) {
+    rd_wire_stop();
+  }
+
+  rd_wire_tx_len = 0;
+  return 0;
+}
+
+uint8_t wire_request_from(uint8_t addr, uint8_t count, uint8_t stop) {
+  uint8_t i;
+  uint8_t got = 0;
+
+  if (count > RD_WIRE_BUF_LEN) {
+    count = RD_WIRE_BUF_LEN;
+  }
+  rd_wire_rx_len = 0;
+  rd_wire_rx_pos = 0;
+
+  if (count == 0) {
+    return 0;
+  }
+
+  if (!rd_wire_start()) {
+    return 0;
+  }
+  if (rd_wire_status() != 0x08 && rd_wire_status() != 0x10) {
+    rd_wire_stop();
+    return 0;
+  }
+
+  if (!rd_wire_send_byte((uint8_t)(((addr << 1) | 0x01) & 0xFF))) {
+    rd_wire_stop();
+    return 0;
+  }
+  if (rd_wire_status() != 0x40) {
+    /* SLA+R not acknowledged. */
+    rd_wire_stop();
+    return 0;
+  }
+
+  for (i = 0; i < count; i++) {
+    uint8_t is_last = (uint8_t)(i == (uint8_t)(count - 1));
+    if (!rd_wire_recv_byte((uint8_t)(is_last ? 0 : 1))) {
+      break;
+    }
+    rd_wire_rx_buf[got++] = TWDR;
+  }
+
+  if (stop) {
+    rd_wire_stop();
+  }
+
+  rd_wire_rx_len = got;
+  return got;
+}
+
+int wire_available(void) {
+  return (int)(rd_wire_rx_len - rd_wire_rx_pos);
+}
+
+int wire_read(void) {
+  if (rd_wire_rx_pos >= rd_wire_rx_len) {
+    return -1;
+  }
+  return rd_wire_rx_buf[rd_wire_rx_pos++];
+}
+
 void serial_write(uint8_t value) {
   while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
   }
