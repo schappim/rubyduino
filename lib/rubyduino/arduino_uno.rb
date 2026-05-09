@@ -47,6 +47,9 @@ module ArduinoUNO
   ffi_func :bit_clear, [:uint32, :uint8], :uint32
   ffi_func :high_byte, [:uint16], :uint8
   ffi_func :low_byte, [:uint16], :uint8
+  ffi_func :map_value, [:int32, :int32, :int32, :int32, :int32], :int32
+  ffi_func :constrain, [:int32, :int32, :int32], :int32
+  ffi_func :sq, [:int32], :int32
 end
 
 def pin_mode(pin, mode)
@@ -151,4 +154,16 @@ end
 
 def low_byte(value)
   ArduinoUNO.low_byte(value)
+end
+
+def map_value(value, from_low, from_high, to_low, to_high)
+  ArduinoUNO.map_value(value, from_low, from_high, to_low, to_high)
+end
+
+def constrain(value, low, high)
+  ArduinoUNO.constrain(value, low, high)
+end
+
+def sq(value)
+  ArduinoUNO.sq(value)
 end

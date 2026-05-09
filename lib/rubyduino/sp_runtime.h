@@ -571,6 +571,31 @@ uint8_t low_byte(uint16_t value) {
   return (uint8_t)(value & 0xFF);
 }
 
+int32_t map_value(int32_t value, int32_t from_low, int32_t from_high, int32_t to_low, int32_t to_high) {
+  int32_t from_span = from_high - from_low;
+  int32_t to_span = to_high - to_low;
+
+  if (from_span == 0) {
+    return to_low;
+  }
+
+  return (int32_t)(((int64_t)(value - from_low) * (int64_t)to_span) / (int64_t)from_span) + to_low;
+}
+
+int32_t constrain(int32_t value, int32_t low, int32_t high) {
+  if (value < low) {
+    return low;
+  }
+  if (value > high) {
+    return high;
+  }
+  return value;
+}
+
+int32_t sq(int32_t value) {
+  return value * value;
+}
+
 #define fflush(stream) ((void)0)
 
 #endif
