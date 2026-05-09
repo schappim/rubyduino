@@ -31,6 +31,18 @@ module ArduinoUNO
   DEC = 10
   HEX = 16
 
+  SPI_MODE0 = 0
+  SPI_MODE1 = 1
+  SPI_MODE2 = 2
+  SPI_MODE3 = 3
+  SPI_CLOCK_DIV4 = 0
+  SPI_CLOCK_DIV16 = 1
+  SPI_CLOCK_DIV64 = 2
+  SPI_CLOCK_DIV128 = 3
+  SPI_CLOCK_DIV2 = 4
+  SPI_CLOCK_DIV8 = 5
+  SPI_CLOCK_DIV32 = 6
+
   ffi_func :pin_mode, [:uint8, :uint8], :int
   ffi_func :digital_write, [:uint8, :uint8], :int
   ffi_func :digital_read, [:uint8], :int
@@ -111,6 +123,13 @@ module ArduinoUNO
   ffi_func :eeprom_length, [], :uint16
   ffi_func :eeprom_read_int, [:uint16], :int32
   ffi_func :eeprom_write_int, [:uint16, :int32], :void
+  ffi_func :spi_begin, [], :void
+  ffi_func :spi_end, [], :void
+  ffi_func :spi_set_bit_order, [:uint8], :void
+  ffi_func :spi_set_clock_divider, [:uint8], :void
+  ffi_func :spi_set_data_mode, [:uint8], :void
+  ffi_func :spi_transfer, [:uint8], :uint8
+  ffi_func :spi_transfer16, [:uint16], :uint16
 end
 
 def pin_mode(pin, mode)
@@ -479,4 +498,32 @@ end
 
 def eeprom_write_int(addr, value)
   ArduinoUNO.eeprom_write_int(addr, value)
+end
+
+def spi_begin
+  ArduinoUNO.spi_begin
+end
+
+def spi_end
+  ArduinoUNO.spi_end
+end
+
+def spi_set_bit_order(order)
+  ArduinoUNO.spi_set_bit_order(order)
+end
+
+def spi_set_clock_divider(div)
+  ArduinoUNO.spi_set_clock_divider(div)
+end
+
+def spi_set_data_mode(mode)
+  ArduinoUNO.spi_set_data_mode(mode)
+end
+
+def spi_transfer(byte)
+  ArduinoUNO.spi_transfer(byte)
+end
+
+def spi_transfer16(word)
+  ArduinoUNO.spi_transfer16(word)
 end

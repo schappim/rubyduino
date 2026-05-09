@@ -836,6 +836,87 @@ void eeprom_write_int(uint16_t addr, int32_t value) {
   eeprom_update_dword((uint32_t *)(uintptr_t)addr, (uint32_t)value);
 }
 
+#define RD_SPI_MOSI_PIN 11
+#define RD_SPI_MISO_PIN 12
+#define RD_SPI_SCK_PIN  13
+#define RD_SPI_SS_PIN   10
+
+void spi_begin(void) {
+  /* MOSI, SCK, SS as outputs; MISO as input. */
+  pin_mode(RD_SPI_MOSI_PIN, 1);
+  pin_mode(RD_SPI_SCK_PIN, 1);
+  pin_mode(RD_SPI_SS_PIN, 1);
+  pin_mode(RD_SPI_MISO_PIN, 0);
+  digital_write(RD_SPI_SS_PIN, 1);
+
+  /* Enable SPI, master, default to MSB first, mode 0, fosc/4 (~4 MHz). */
+  SPCR = (uint8_t)((1 << SPE) | (1 << MSTR));
+  SPSR = 0;
+}
+
+void spi_end(void) {
+  SPCR &= (uint8_t)~(1 << SPE);
+}
+
+void spi_set_bit_order(uint8_t order) {
+  if (order) {
+    SPCR |= (uint8_t)(1 << DORD);
+  } else {
+    SPCR &= (uint8_t)~(1 << DORD);
+  }
+}
+
+void spi_set_data_mode(uint8_t mode) {
+  SPCR = (uint8_t)((SPCR & (uint8_t)~((1 << CPOL) | (1 << CPHA))) | (uint8_t)((mode & 0x03) << CPHA));
+}
+
+void spi_set_clock_divider(uint8_t divider) {
+  /*
+   * divider mapping (Arduino constants):
+   *   SPI_CLOCK_DIV4   = 0  -> SPR1=0, SPR0=0, SPI2X=0
+   *   SPI_CLOCK_DIV16  = 1  -> SPR1=0, SPR0=1, SPI2X=0
+   *   SPI_CLOCK_DIV64  = 2  -> SPR1=1, SPR0=0, SPI2X=0
+   *   SPI_CLOCK_DIV128 = 3  -> SPR1=1, SPR0=1, SPI2X=0
+   *   SPI_CLOCK_DIV2   = 4  -> SPR1=0, SPR0=0, SPI2X=1
+   *   SPI_CLOCK_DIV8   = 5  -> SPR1=0, SPR0=1, SPI2X=1
+   *   SPI_CLOCK_DIV32  = 6  -> SPR1=1, SPR0=0, SPI2X=1
+   */
+  uint8_t spr = (uint8_t)(divider & 0x03);
+  uint8_t spi2x = (divider >= 4) ? 1 : 0;
+
+  SPCR = (uint8_t)((SPCR & (uint8_t)~((1 << SPR1) | (1 << SPR0))) | spr);
+  if (spi2x) {
+    SPSR |= (uint8_t)(1 << SPI2X);
+  } else {
+    SPSR &= (uint8_t)~(1 << SPI2X);
+  }
+}
+
+uint8_t spi_transfer(uint8_t value) {
+  SPDR = value;
+  /* The wait must be a single read to satisfy the SPIF clear semantics. */
+  asm volatile("nop");
+  while (!(SPSR & (uint8_t)(1 << SPIF))) {
+  }
+  return SPDR;
+}
+
+uint16_t spi_transfer16(uint16_t value) {
+  uint8_t hi;
+  uint8_t lo;
+
+  if (SPCR & (uint8_t)(1 << DORD)) {
+    /* LSB first: low byte first. */
+    lo = spi_transfer((uint8_t)(value & 0xFF));
+    hi = spi_transfer((uint8_t)(value >> 8));
+  } else {
+    hi = spi_transfer((uint8_t)(value >> 8));
+    lo = spi_transfer((uint8_t)(value & 0xFF));
+  }
+
+  return (uint16_t)(((uint16_t)hi << 8) | lo);
+}
+
 void serial_write(uint8_t value) {
   while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
   }
