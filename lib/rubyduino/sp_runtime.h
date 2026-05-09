@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <avr/eeprom.h>
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <util/delay.h>
@@ -788,6 +789,51 @@ static void serial_println_float_default(double value) {
   rd_uno_print_float(value, 2);
   serial_write((uint8_t)'\r');
   serial_write((uint8_t)'\n');
+}
+
+#ifndef E2END
+#define E2END 1023
+#endif
+
+uint16_t eeprom_length(void) {
+  return (uint16_t)(E2END + 1);
+}
+
+uint8_t eeprom_read(uint16_t addr) {
+  if (addr > E2END) {
+    return 0;
+  }
+  return eeprom_read_byte((const uint8_t *)(uintptr_t)addr);
+}
+
+void eeprom_write(uint16_t addr, uint8_t value) {
+  if (addr > E2END) {
+    return;
+  }
+  eeprom_write_byte((uint8_t *)(uintptr_t)addr, value);
+}
+
+void eeprom_update(uint16_t addr, uint8_t value) {
+  if (addr > E2END) {
+    return;
+  }
+  eeprom_update_byte((uint8_t *)(uintptr_t)addr, value);
+}
+
+int32_t eeprom_read_int(uint16_t addr) {
+  uint32_t v;
+  if ((uint32_t)addr + 4 > (uint32_t)E2END + 1) {
+    return 0;
+  }
+  v = eeprom_read_dword((const uint32_t *)(uintptr_t)addr);
+  return (int32_t)v;
+}
+
+void eeprom_write_int(uint16_t addr, int32_t value) {
+  if ((uint32_t)addr + 4 > (uint32_t)E2END + 1) {
+    return;
+  }
+  eeprom_update_dword((uint32_t *)(uintptr_t)addr, (uint32_t)value);
 }
 
 void serial_write(uint8_t value) {

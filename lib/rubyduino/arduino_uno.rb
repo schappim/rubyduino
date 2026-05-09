@@ -105,6 +105,12 @@ module ArduinoUNO
   ffi_func :serial_println_bin, [:uint32], :void
   ffi_func :serial_println_oct, [:uint32], :void
   ffi_func :serial_println_float, [:double, :uint8], :void
+  ffi_func :eeprom_read, [:uint16], :uint8
+  ffi_func :eeprom_write, [:uint16, :uint8], :void
+  ffi_func :eeprom_update, [:uint16, :uint8], :void
+  ffi_func :eeprom_length, [], :uint16
+  ffi_func :eeprom_read_int, [:uint16], :int32
+  ffi_func :eeprom_write_int, [:uint16, :int32], :void
 end
 
 def pin_mode(pin, mode)
@@ -449,4 +455,28 @@ end
 
 def serial_println_float(value, decimals = 2)
   ArduinoUNO.serial_println_float(value, decimals)
+end
+
+def eeprom_read(addr)
+  ArduinoUNO.eeprom_read(addr)
+end
+
+def eeprom_write(addr, value)
+  ArduinoUNO.eeprom_write(addr, value)
+end
+
+def eeprom_update(addr, value)
+  ArduinoUNO.eeprom_update(addr, value)
+end
+
+def eeprom_length
+  ArduinoUNO.eeprom_length
+end
+
+def eeprom_read_int(addr)
+  ArduinoUNO.eeprom_read_int(addr)
+end
+
+def eeprom_write_int(addr, value)
+  ArduinoUNO.eeprom_write_int(addr, value)
 end
