@@ -87,6 +87,11 @@ module ArduinoUNO
   ffi_func :serial_available_for_write, [], :int
   ffi_func :serial_set_timeout, [:uint32], :void
   ffi_func :serial_get_timeout, [], :uint32
+  ffi_func :serial_read_byte_timeout, [], :int
+  ffi_func :serial_parse_int, [], :int32
+  ffi_func :serial_parse_float, [], :double
+  ffi_func :serial_find, [:str], :uint8
+  ffi_func :serial_find_until, [:str, :str], :uint8
 end
 
 def pin_mode(pin, mode)
@@ -371,4 +376,32 @@ end
 
 def serial_get_timeout
   ArduinoUNO.serial_get_timeout
+end
+
+def serial_read_byte_timeout
+  ArduinoUNO.serial_read_byte_timeout
+end
+
+def serial_parse_int
+  ArduinoUNO.serial_parse_int
+end
+
+def serial_parse_float
+  ArduinoUNO.serial_parse_float
+end
+
+def serial_find(target)
+  ArduinoUNO.serial_find(target)
+end
+
+def serial_find?(target)
+  ArduinoUNO.serial_find(target) == 1
+end
+
+def serial_find_until(target, terminator)
+  ArduinoUNO.serial_find_until(target, terminator)
+end
+
+def serial_find_until?(target, terminator)
+  ArduinoUNO.serial_find_until(target, terminator) == 1
 end

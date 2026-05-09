@@ -513,6 +513,184 @@ uint32_t serial_get_timeout(void) {
   return rd_uno_serial_timeout_ms;
 }
 
+int serial_read_byte_timeout(void) {
+  uint32_t start = millis();
+
+  while (1) {
+    int v = serial_read();
+    if (v != -1) {
+      return v;
+    }
+    if ((millis() - start) >= rd_uno_serial_timeout_ms) {
+      return -1;
+    }
+  }
+}
+
+static int rd_uno_serial_peek_blocking(uint32_t deadline_ms) {
+  while (1) {
+    int v = serial_peek();
+    if (v != -1) {
+      return v;
+    }
+    if (millis() >= deadline_ms) {
+      return -1;
+    }
+  }
+}
+
+int32_t serial_parse_int(void) {
+  uint32_t deadline = millis() + rd_uno_serial_timeout_ms;
+  int32_t value = 0;
+  int negative = 0;
+  int saw_digit = 0;
+  int v;
+
+  for (;;) {
+    v = rd_uno_serial_peek_blocking(deadline);
+    if (v == -1) {
+      return 0;
+    }
+    if (v == '-' || (v >= '0' && v <= '9')) {
+      break;
+    }
+    (void)serial_read();
+  }
+
+  if (v == '-') {
+    negative = 1;
+    (void)serial_read();
+  }
+
+  for (;;) {
+    v = serial_peek();
+    if (v == -1) {
+      if (millis() >= deadline) {
+        break;
+      }
+      continue;
+    }
+    if (v < '0' || v > '9') {
+      break;
+    }
+    value = value * 10 + (v - '0');
+    saw_digit = 1;
+    (void)serial_read();
+  }
+
+  if (!saw_digit) {
+    return 0;
+  }
+  return negative ? -value : value;
+}
+
+double serial_parse_float(void) {
+  uint32_t deadline = millis() + rd_uno_serial_timeout_ms;
+  double value = 0.0;
+  double frac = 0.1;
+  int negative = 0;
+  int seen_dot = 0;
+  int saw_digit = 0;
+  int v;
+
+  for (;;) {
+    v = rd_uno_serial_peek_blocking(deadline);
+    if (v == -1) {
+      return 0.0;
+    }
+    if (v == '-' || v == '.' || (v >= '0' && v <= '9')) {
+      break;
+    }
+    (void)serial_read();
+  }
+
+  if (v == '-') {
+    negative = 1;
+    (void)serial_read();
+  }
+
+  for (;;) {
+    v = serial_peek();
+    if (v == -1) {
+      if (millis() >= deadline) {
+        break;
+      }
+      continue;
+    }
+    if (v == '.') {
+      if (seen_dot) {
+        break;
+      }
+      seen_dot = 1;
+      (void)serial_read();
+      continue;
+    }
+    if (v < '0' || v > '9') {
+      break;
+    }
+    if (seen_dot) {
+      value += (v - '0') * frac;
+      frac *= 0.1;
+    } else {
+      value = value * 10.0 + (v - '0');
+    }
+    saw_digit = 1;
+    (void)serial_read();
+  }
+
+  if (!saw_digit) {
+    return 0.0;
+  }
+  return negative ? -value : value;
+}
+
+static uint8_t rd_uno_serial_find_impl(const char *target, const char *terminator) {
+  uint32_t deadline = millis() + rd_uno_serial_timeout_ms;
+  size_t target_pos = 0;
+  size_t term_pos = 0;
+  size_t target_len = strlen(target);
+  size_t term_len = terminator ? strlen(terminator) : 0;
+
+  if (target_len == 0) {
+    return 1;
+  }
+
+  while (millis() < deadline) {
+    int v = serial_read();
+    if (v == -1) {
+      continue;
+    }
+    if ((char)v == target[target_pos]) {
+      target_pos++;
+      if (target_pos == target_len) {
+        return 1;
+      }
+    } else {
+      target_pos = ((char)v == target[0]) ? 1 : 0;
+    }
+
+    if (term_len > 0) {
+      if ((char)v == terminator[term_pos]) {
+        term_pos++;
+        if (term_pos == term_len) {
+          return 0;
+        }
+      } else {
+        term_pos = ((char)v == terminator[0]) ? 1 : 0;
+      }
+    }
+  }
+  return 0;
+}
+
+uint8_t serial_find(const char *target) {
+  return rd_uno_serial_find_impl(target, NULL);
+}
+
+uint8_t serial_find_until(const char *target, const char *terminator) {
+  return rd_uno_serial_find_impl(target, terminator);
+}
+
 void serial_write(uint8_t value) {
   while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
   }
