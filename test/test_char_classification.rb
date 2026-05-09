@@ -80,4 +80,29 @@ class TestCharClassification < Minitest::Test
     obj = CompileHelper.compile_ruby_to_avr_obj(sketch)
     refute_empty obj
   end
+
+  def test_predicate_aliases_compile
+    sketch = <<~RUBY
+      ch = serial_read
+      digital_write(13, 1) if is_alpha?(ch)
+      digital_write(12, 1) if is_digit?(ch)
+      digital_write(11, 1) if is_hexadecimal_digit?(ch)
+    RUBY
+    c = CompileHelper.compile_ruby_to_c(sketch)
+    # Predicate aliases route through sp_is_*_p inline functions.
+    assert_includes c, "sp_is_alpha_p("
+    assert_includes c, "sp_is_digit_p("
+    assert_includes c, "sp_is_hexadecimal_digit_p("
+  end
+
+  def test_predicate_aliases_compile_to_avr
+    skip "avr-gcc not installed" unless CompileHelper.avr_gcc_available?
+    sketch = <<~RUBY
+      ch = serial_read
+      digital_write(13, 1) if is_alpha?(ch)
+      digital_write(12, 1) if is_space?(ch)
+    RUBY
+    obj = CompileHelper.compile_ruby_to_avr_obj(sketch)
+    refute_empty obj
+  end
 end

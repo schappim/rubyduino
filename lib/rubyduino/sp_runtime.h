@@ -651,6 +651,29 @@ int is_hexadecimal_digit(int c) {
   return 0;
 }
 
+void random_seed(uint32_t seed) {
+  if (seed == 0) {
+    return;
+  }
+  srand((unsigned int)seed);
+}
+
+int32_t random_max(int32_t high) {
+  if (high <= 0) {
+    return 0;
+  }
+  return (int32_t)((unsigned long)rand() % (unsigned long)high);
+}
+
+int32_t random_range(int32_t low, int32_t high) {
+  int32_t span;
+  if (high <= low) {
+    return low;
+  }
+  span = high - low;
+  return low + (int32_t)((unsigned long)rand() % (unsigned long)span);
+}
+
 #define fflush(stream) ((void)0)
 
 #endif

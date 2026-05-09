@@ -80,15 +80,21 @@ module SpinelArduinoCodegen
 
     left = @nd_left[arg]
     right = @nd_right[arg]
-    return nil unless integer_literal_node?(left) && integer_literal_node?(right)
 
-    first = @nd_value[left].to_i
-    last = @nd_value[right].to_i
-    return "0" if last < first
+    if integer_literal_node?(left) && integer_literal_node?(right)
+      first = @nd_value[left].to_i
+      last = @nd_value[right].to_i
+      return "0" if last < first
+
+      @needs_rand = 1
+      span = last - first + 1
+      return "((mrb_int)(#{first} + (rand() % #{span})))"
+    end
 
     @needs_rand = 1
-    span = last - first + 1
-    "((mrb_int)(#{first} + (rand() % #{span})))"
+    left_c = compile_expr(left)
+    right_c = compile_expr(right)
+    "((mrb_int)random_range((int32_t)(#{left_c}), (int32_t)(#{right_c}) + 1))"
   end
 
   def integer_literal_node?(nid)
