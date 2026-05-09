@@ -17,6 +17,11 @@ module ArduinoUNO
   LSBFIRST = 0
   MSBFIRST = 1
 
+  INT_LOW = 0
+  INT_CHANGE = 1
+  INT_FALLING = 2
+  INT_RISING = 3
+
   ffi_func :pin_mode, [:uint8, :uint8], :int
   ffi_func :digital_write, [:uint8, :uint8], :int
   ffi_func :digital_read, [:uint8], :int
@@ -67,6 +72,10 @@ module ArduinoUNO
   ffi_func :random_max, [:int32], :int32
   ffi_func :tone_for, [:uint8, :uint16, :uint32], :void
   ffi_func :no_tone, [:uint8], :void
+  ffi_func :attach_interrupt, [:uint8, :uint8], :void
+  ffi_func :detach_interrupt, [:uint8], :void
+  ffi_func :interrupt_fired, [:uint8], :uint8
+  ffi_func :digital_pin_to_interrupt, [:uint8], :int8
 end
 
 def pin_mode(pin, mode)
@@ -303,4 +312,24 @@ end
 
 def pulse_in_long(pin, value, timeout_us = 1_000_000)
   ArduinoUNO.pulse_in_timeout(pin, value, timeout_us)
+end
+
+def attach_interrupt(interrupt_num, mode)
+  ArduinoUNO.attach_interrupt(interrupt_num, mode)
+end
+
+def detach_interrupt(interrupt_num)
+  ArduinoUNO.detach_interrupt(interrupt_num)
+end
+
+def interrupt_fired(interrupt_num)
+  ArduinoUNO.interrupt_fired(interrupt_num)
+end
+
+def interrupt_fired?(interrupt_num)
+  ArduinoUNO.interrupt_fired(interrupt_num) == 1
+end
+
+def digital_pin_to_interrupt(pin)
+  ArduinoUNO.digital_pin_to_interrupt(pin)
 end

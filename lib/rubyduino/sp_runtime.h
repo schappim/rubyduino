@@ -778,6 +778,68 @@ void no_tone(uint8_t pin) {
   sei();
 }
 
+static volatile uint8_t rd_uno_int_flags[2] = {0, 0};
+
+ISR(INT0_vect) {
+  rd_uno_int_flags[0] = 1;
+}
+
+ISR(INT1_vect) {
+  rd_uno_int_flags[1] = 1;
+}
+
+void attach_interrupt(uint8_t interrupt_num, uint8_t mode) {
+  uint8_t shift;
+
+  if (interrupt_num > 1) {
+    return;
+  }
+  if (mode > 3) {
+    return;
+  }
+
+  shift = (uint8_t)(interrupt_num * 2);
+
+  cli();
+  EICRA = (uint8_t)((EICRA & (uint8_t)~((uint8_t)0x03 << shift)) | (uint8_t)((mode & 0x03) << shift));
+  EIFR = (uint8_t)(1 << interrupt_num);
+  EIMSK |= (uint8_t)(1 << interrupt_num);
+  rd_uno_int_flags[interrupt_num] = 0;
+  sei();
+}
+
+void detach_interrupt(uint8_t interrupt_num) {
+  if (interrupt_num > 1) {
+    return;
+  }
+  cli();
+  EIMSK &= (uint8_t)~(1 << interrupt_num);
+  rd_uno_int_flags[interrupt_num] = 0;
+  sei();
+}
+
+uint8_t interrupt_fired(uint8_t interrupt_num) {
+  uint8_t fired;
+  if (interrupt_num > 1) {
+    return 0;
+  }
+  cli();
+  fired = rd_uno_int_flags[interrupt_num];
+  rd_uno_int_flags[interrupt_num] = 0;
+  sei();
+  return fired;
+}
+
+int8_t digital_pin_to_interrupt(uint8_t pin) {
+  if (pin == 2) {
+    return 0;
+  }
+  if (pin == 3) {
+    return 1;
+  }
+  return -1;
+}
+
 #define fflush(stream) ((void)0)
 
 #endif
