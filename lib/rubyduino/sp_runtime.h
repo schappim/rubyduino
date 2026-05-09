@@ -691,6 +691,105 @@ uint8_t serial_find_until(const char *target, const char *terminator) {
   return rd_uno_serial_find_impl(target, terminator);
 }
 
+static void rd_uno_print_unsigned_base(uint32_t value, uint8_t base) {
+  char buf[33];
+  char *p = &buf[32];
+  uint32_t v = value;
+
+  *p = '\0';
+  if (base < 2) {
+    base = 10;
+  }
+  do {
+    p--;
+    uint8_t digit = (uint8_t)(v % base);
+    *p = (char)((digit < 10) ? ('0' + digit) : ('A' + (digit - 10)));
+    v /= base;
+  } while (v > 0);
+
+  serial_print_str(p);
+}
+
+void serial_print_hex(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 16);
+}
+
+void serial_print_bin(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 2);
+}
+
+void serial_print_oct(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 8);
+}
+
+void serial_println_hex(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 16);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+void serial_println_bin(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 2);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+void serial_println_oct(uint32_t value) {
+  rd_uno_print_unsigned_base(value, 8);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+static void rd_uno_print_float(double value, uint8_t decimals) {
+  if (value < 0.0) {
+    serial_write((uint8_t)'-');
+    value = -value;
+  }
+
+  /* Round to the requested number of decimals. */
+  double rounding = 0.5;
+  uint8_t i;
+  for (i = 0; i < decimals; i++) {
+    rounding /= 10.0;
+  }
+  value += rounding;
+
+  uint32_t int_part = (uint32_t)value;
+  double remainder = value - (double)int_part;
+  serial_print_int((int)int_part);
+
+  if (decimals > 0) {
+    serial_write((uint8_t)'.');
+    while (decimals > 0) {
+      remainder *= 10.0;
+      uint8_t digit = (uint8_t)remainder;
+      serial_write((uint8_t)('0' + digit));
+      remainder -= (double)digit;
+      decimals--;
+    }
+  }
+}
+
+void serial_print_float(double value, uint8_t decimals) {
+  rd_uno_print_float(value, decimals);
+}
+
+void serial_println_float(double value, uint8_t decimals) {
+  rd_uno_print_float(value, decimals);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
+static void serial_print_float_default(double value) {
+  rd_uno_print_float(value, 2);
+}
+
+static void serial_println_float_default(double value) {
+  rd_uno_print_float(value, 2);
+  serial_write((uint8_t)'\r');
+  serial_write((uint8_t)'\n');
+}
+
 void serial_write(uint8_t value) {
   while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
   }

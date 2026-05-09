@@ -53,19 +53,50 @@ module SpinelArduinoCodegen
     return nil if args_id < 0
 
     arg_ids = get_args(args_id)
-    return nil unless arg_ids.length == 1
 
-    arg = arg_ids.first
-    fn = arduino_serial_print_func(arg, newline)
-    "(" + fn + "(" + compile_expr(arg) + "), (mrb_int)0)"
+    if arg_ids.length == 1
+      arg = arg_ids.first
+      fn = arduino_serial_print_func(arg, newline)
+      return "(" + fn + "(" + compile_expr(arg) + "), (mrb_int)0)"
+    end
+
+    if arg_ids.length == 2
+      value_arg = arg_ids[0]
+      base_or_dec_arg = arg_ids[1]
+
+      if infer_type(value_arg) == "float"
+        prefix = newline ? "serial_println_float" : "serial_print_float"
+        return "(" + prefix + "((double)(" + compile_expr(value_arg) + "), (uint8_t)(" + compile_expr(base_or_dec_arg) + ")), (mrb_int)0)"
+      end
+
+      base_fn = arduino_base_print_func(base_or_dec_arg, newline)
+      return nil unless base_fn
+
+      return "(" + base_fn + "((uint32_t)(" + compile_expr(value_arg) + ")), (mrb_int)0)"
+    end
+
+    nil
   end
 
   def arduino_serial_print_func(arg, newline)
     if infer_type(arg) == "string"
       return newline ? "serial_println_str" : "serial_print_str"
     end
+    if infer_type(arg) == "float"
+      return newline ? "serial_println_float_default" : "serial_print_float_default"
+    end
 
     newline ? "serial_println_int" : "serial_print_int"
+  end
+
+  def arduino_base_print_func(base_arg, newline)
+    return nil unless integer_literal_node?(base_arg)
+    case @nd_value[base_arg].to_i
+    when 2  then newline ? "serial_println_bin" : "serial_print_bin"
+    when 8  then newline ? "serial_println_oct" : "serial_print_oct"
+    when 10 then newline ? "serial_println_int" : "serial_print_int"
+    when 16 then newline ? "serial_println_hex" : "serial_print_hex"
+    end
   end
 
   def compile_arduino_rand(nid)

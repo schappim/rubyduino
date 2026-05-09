@@ -26,6 +26,11 @@ module ArduinoUNO
   AREF_DEFAULT = 1
   AREF_INTERNAL = 3
 
+  BIN = 2
+  OCT = 8
+  DEC = 10
+  HEX = 16
+
   ffi_func :pin_mode, [:uint8, :uint8], :int
   ffi_func :digital_write, [:uint8, :uint8], :int
   ffi_func :digital_read, [:uint8], :int
@@ -92,6 +97,14 @@ module ArduinoUNO
   ffi_func :serial_parse_float, [], :double
   ffi_func :serial_find, [:str], :uint8
   ffi_func :serial_find_until, [:str, :str], :uint8
+  ffi_func :serial_print_hex, [:uint32], :void
+  ffi_func :serial_print_bin, [:uint32], :void
+  ffi_func :serial_print_oct, [:uint32], :void
+  ffi_func :serial_print_float, [:double, :uint8], :void
+  ffi_func :serial_println_hex, [:uint32], :void
+  ffi_func :serial_println_bin, [:uint32], :void
+  ffi_func :serial_println_oct, [:uint32], :void
+  ffi_func :serial_println_float, [:double, :uint8], :void
 end
 
 def pin_mode(pin, mode)
@@ -404,4 +417,36 @@ end
 
 def serial_find_until?(target, terminator)
   ArduinoUNO.serial_find_until(target, terminator) == 1
+end
+
+def serial_print_hex(value)
+  ArduinoUNO.serial_print_hex(value)
+end
+
+def serial_print_bin(value)
+  ArduinoUNO.serial_print_bin(value)
+end
+
+def serial_print_oct(value)
+  ArduinoUNO.serial_print_oct(value)
+end
+
+def serial_print_float(value, decimals = 2)
+  ArduinoUNO.serial_print_float(value, decimals)
+end
+
+def serial_println_hex(value)
+  ArduinoUNO.serial_println_hex(value)
+end
+
+def serial_println_bin(value)
+  ArduinoUNO.serial_println_bin(value)
+end
+
+def serial_println_oct(value)
+  ArduinoUNO.serial_println_oct(value)
+end
+
+def serial_println_float(value, decimals = 2)
+  ArduinoUNO.serial_println_float(value, decimals)
 end
