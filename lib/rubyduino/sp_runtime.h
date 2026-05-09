@@ -674,6 +674,110 @@ int32_t random_range(int32_t low, int32_t high) {
   return low + (int32_t)((unsigned long)rand() % (unsigned long)span);
 }
 
+static volatile uint8_t rd_uno_tone_pin = 255;
+static volatile uint8_t *rd_uno_tone_port_reg = NULL;
+static volatile uint8_t rd_uno_tone_port_mask = 0;
+static volatile int32_t rd_uno_tone_toggles_remaining = 0;
+
+ISR(TIMER2_COMPA_vect) {
+  if (rd_uno_tone_port_reg == NULL) {
+    return;
+  }
+
+  *rd_uno_tone_port_reg ^= rd_uno_tone_port_mask;
+
+  if (rd_uno_tone_toggles_remaining > 0) {
+    rd_uno_tone_toggles_remaining--;
+    if (rd_uno_tone_toggles_remaining == 0) {
+      TCCR2A = 0;
+      TCCR2B = 0;
+      TIMSK2 = 0;
+      *rd_uno_tone_port_reg &= (uint8_t)~rd_uno_tone_port_mask;
+      rd_uno_tone_port_reg = NULL;
+      rd_uno_tone_pin = 255;
+    }
+  }
+}
+
+static void rd_uno_tone_stop(void) {
+  TCCR2A = 0;
+  TCCR2B = 0;
+  TIMSK2 &= (uint8_t)~(1 << OCIE2A);
+  if (rd_uno_tone_port_reg) {
+    *rd_uno_tone_port_reg &= (uint8_t)~rd_uno_tone_port_mask;
+  }
+  rd_uno_tone_port_reg = NULL;
+  rd_uno_tone_pin = 255;
+  rd_uno_tone_toggles_remaining = 0;
+}
+
+void tone_for(uint8_t pin, uint16_t frequency, uint32_t duration_ms) {
+  uint8_t prescaler_bits;
+  uint32_t prescaler_value;
+  uint32_t ocr;
+
+  if (frequency == 0) {
+    rd_uno_tone_stop();
+    return;
+  }
+  if (!rd_uno_valid_pin(pin)) {
+    return;
+  }
+
+  pin_mode(pin, 1);
+
+  static const uint16_t prescalers[7] = {1, 8, 32, 64, 128, 256, 1024};
+  static const uint8_t prescaler_cs[7] = {1, 2, 3, 4, 5, 6, 7};
+  uint8_t i;
+  prescaler_bits = 0;
+  prescaler_value = 0;
+  for (i = 0; i < 7; i++) {
+    uint32_t candidate = (F_CPU / (2UL * (uint32_t)prescalers[i] * (uint32_t)frequency));
+    if (candidate > 0 && candidate <= 256) {
+      prescaler_bits = prescaler_cs[i];
+      prescaler_value = (uint32_t)prescalers[i];
+      ocr = candidate - 1;
+      break;
+    }
+  }
+  if (prescaler_bits == 0) {
+    return;
+  }
+  (void)prescaler_value;
+
+  cli();
+  rd_uno_tone_pin = pin;
+  rd_uno_tone_port_reg = rd_uno_port(pin);
+  rd_uno_tone_port_mask = (uint8_t)(1 << rd_uno_bit(pin));
+  if (duration_ms > 0) {
+    uint32_t toggles = (uint32_t)((uint32_t)2 * (uint32_t)frequency * duration_ms / 1000UL);
+    if (toggles == 0) {
+      toggles = 1;
+    }
+    rd_uno_tone_toggles_remaining = (int32_t)toggles;
+  } else {
+    rd_uno_tone_toggles_remaining = 0;
+  }
+
+  TCCR2A = (uint8_t)(1 << WGM21);
+  TCCR2B = prescaler_bits;
+  OCR2A = (uint8_t)ocr;
+  TCNT2 = 0;
+  TIMSK2 = (uint8_t)(1 << OCIE2A);
+  sei();
+}
+
+void no_tone(uint8_t pin) {
+  if (!rd_uno_valid_pin(pin)) {
+    return;
+  }
+  cli();
+  if (rd_uno_tone_pin == pin || rd_uno_tone_pin == 255) {
+    rd_uno_tone_stop();
+  }
+  sei();
+}
+
 #define fflush(stream) ((void)0)
 
 #endif

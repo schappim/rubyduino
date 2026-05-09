@@ -65,6 +65,8 @@ module ArduinoUNO
   ffi_func :random_seed, [:uint32], :void
   ffi_func :random_range, [:int32, :int32], :int32
   ffi_func :random_max, [:int32], :int32
+  ffi_func :tone_for, [:uint8, :uint16, :uint32], :void
+  ffi_func :no_tone, [:uint8], :void
 end
 
 def pin_mode(pin, mode)
@@ -289,4 +291,12 @@ end
 
 def random_max(high)
   ArduinoUNO.random_max(high)
+end
+
+def tone(pin, frequency, duration_ms = 0)
+  ArduinoUNO.tone_for(pin, frequency, duration_ms)
+end
+
+def no_tone(pin)
+  ArduinoUNO.no_tone(pin)
 end
