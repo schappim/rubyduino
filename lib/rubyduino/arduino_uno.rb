@@ -40,6 +40,13 @@ module ArduinoUNO
   ffi_func :shift_out, [:uint8, :uint8, :uint8, :uint8], :void
   ffi_func :interrupts, [], :void
   ffi_func :no_interrupts, [], :void
+  ffi_func :bit, [:uint8], :uint32
+  ffi_func :bit_read, [:uint32, :uint8], :uint8
+  ffi_func :bit_write, [:uint32, :uint8, :uint8], :uint32
+  ffi_func :bit_set, [:uint32, :uint8], :uint32
+  ffi_func :bit_clear, [:uint32, :uint8], :uint32
+  ffi_func :high_byte, [:uint16], :uint8
+  ffi_func :low_byte, [:uint16], :uint8
 end
 
 def pin_mode(pin, mode)
@@ -116,4 +123,32 @@ end
 
 def no_interrupts
   ArduinoUNO.no_interrupts
+end
+
+def bit(n)
+  ArduinoUNO.bit(n)
+end
+
+def bit_read(value, n)
+  ArduinoUNO.bit_read(value, n)
+end
+
+def bit_write(value, n, bitvalue)
+  ArduinoUNO.bit_write(value, n, bitvalue)
+end
+
+def bit_set(value, n)
+  ArduinoUNO.bit_set(value, n)
+end
+
+def bit_clear(value, n)
+  ArduinoUNO.bit_clear(value, n)
+end
+
+def high_byte(value)
+  ArduinoUNO.high_byte(value)
+end
+
+def low_byte(value)
+  ArduinoUNO.low_byte(value)
 end

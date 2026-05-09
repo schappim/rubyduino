@@ -543,6 +543,34 @@ void no_interrupts(void) {
   cli();
 }
 
+uint32_t bit(uint8_t n) {
+  return (uint32_t)1 << n;
+}
+
+uint8_t bit_read(uint32_t value, uint8_t n) {
+  return (uint8_t)((value >> n) & (uint32_t)1);
+}
+
+uint32_t bit_set(uint32_t value, uint8_t n) {
+  return value | ((uint32_t)1 << n);
+}
+
+uint32_t bit_clear(uint32_t value, uint8_t n) {
+  return value & (uint32_t)~((uint32_t)1 << n);
+}
+
+uint32_t bit_write(uint32_t value, uint8_t n, uint8_t bitvalue) {
+  return bitvalue ? bit_set(value, n) : bit_clear(value, n);
+}
+
+uint8_t high_byte(uint16_t value) {
+  return (uint8_t)((value >> 8) & 0xFF);
+}
+
+uint8_t low_byte(uint16_t value) {
+  return (uint8_t)(value & 0xFF);
+}
+
 #define fflush(stream) ((void)0)
 
 #endif
