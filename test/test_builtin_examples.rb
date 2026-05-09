@@ -4,10 +4,10 @@ require "test_helper"
 require "support/compile_helper"
 
 class TestBuiltinExamples < Minitest::Test
-  EXAMPLES_DIR = File.expand_path("../examples/builtin", __dir__)
+  ROOT_EXAMPLES = File.expand_path("../examples", __dir__)
 
-  Dir.glob(File.join(EXAMPLES_DIR, "*", "*.rb")).sort.each do |path|
-    rel = path.sub("#{File.dirname(EXAMPLES_DIR)}/", "")
+  Dir.glob(File.join(ROOT_EXAMPLES, "{builtin,hardware}", "**", "*.rb")).sort.each do |path|
+    rel = path.sub("#{File.dirname(ROOT_EXAMPLES)}/", "")
     test_name = "test_#{rel.gsub(%r{[/.]}, "_")}_compiles"
     define_method(test_name) do
       skip "avr-gcc not installed" unless CompileHelper.avr_gcc_available?
@@ -17,8 +17,10 @@ class TestBuiltinExamples < Minitest::Test
     end
   end
 
-  def test_examples_dir_has_translations
-    rb_files = Dir.glob(File.join(EXAMPLES_DIR, "*", "*.rb"))
-    assert_operator rb_files.length, :>=, 35, "expected at least 35 example sketches"
+  def test_examples_dirs_have_sketches
+    builtin = Dir.glob(File.join(ROOT_EXAMPLES, "builtin", "*", "*.rb"))
+    hardware = Dir.glob(File.join(ROOT_EXAMPLES, "hardware", "*.rb"))
+    assert_operator builtin.length, :>=, 35, "expected at least 35 builtin example sketches"
+    assert_operator hardware.length, :>=, 7, "expected at least 7 hardware example sketches"
   end
 end

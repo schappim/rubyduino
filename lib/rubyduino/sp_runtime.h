@@ -1201,6 +1201,687 @@ void arduino_yield(void) {
    * etc. still compile here. */
 }
 
+/* WS2812 / NeoPixel driver.
+ *
+ * Buffer is sized for up to RD_NEOPIXEL_MAX pixels (3 bytes each, GRB
+ * order). The bit-bang in neopixel_show is hand-tuned for 16 MHz AVR;
+ * each iteration of the inner loop hits T1H ~= 0.8 us, T0H ~= 0.4 us,
+ * full bit period ~= 1.25 us. Interrupts are disabled across the
+ * frame so timer ISRs don't stretch the high pulse and turn 0 bits
+ * into 1 bits.
+ */
+#ifndef RD_NEOPIXEL_MAX
+#define RD_NEOPIXEL_MAX 64
+#endif
+
+static uint8_t rd_neopixel_buf[RD_NEOPIXEL_MAX * 3];
+static uint8_t rd_neopixel_pin = 255;
+static uint16_t rd_neopixel_count = 0;
+
+void neopixel_begin(uint8_t pin, uint16_t count) {
+  uint16_t i;
+
+  if (!rd_uno_valid_pin(pin)) {
+    return;
+  }
+  if (count > RD_NEOPIXEL_MAX) {
+    count = RD_NEOPIXEL_MAX;
+  }
+
+  pin_mode(pin, 1);
+  digital_write(pin, 0);
+  rd_neopixel_pin = pin;
+  rd_neopixel_count = count;
+
+  for (i = 0; i < (uint16_t)RD_NEOPIXEL_MAX * 3; i++) {
+    rd_neopixel_buf[i] = 0;
+  }
+}
+
+void neopixel_set_pixel(uint16_t index, uint8_t r, uint8_t g, uint8_t b) {
+  if (index >= rd_neopixel_count) {
+    return;
+  }
+  /* WS2812 wants GRB order on the wire. */
+  rd_neopixel_buf[index * 3 + 0] = g;
+  rd_neopixel_buf[index * 3 + 1] = r;
+  rd_neopixel_buf[index * 3 + 2] = b;
+}
+
+void neopixel_clear(void) {
+  uint16_t i;
+  for (i = 0; i < rd_neopixel_count * 3; i++) {
+    rd_neopixel_buf[i] = 0;
+  }
+}
+
+void neopixel_show(void) {
+  volatile uint8_t *port;
+  uint8_t mask;
+  uint8_t hi;
+  uint8_t lo;
+  uint8_t b;
+  uint8_t bit;
+  uint8_t *p;
+  uint16_t bytes;
+
+  if (rd_neopixel_count == 0 || rd_neopixel_pin == 255) {
+    return;
+  }
+
+  port = rd_uno_port(rd_neopixel_pin);
+  mask = (uint8_t)(1 << rd_uno_bit(rd_neopixel_pin));
+  hi = (uint8_t)(*port | mask);
+  lo = (uint8_t)(*port & (uint8_t)~mask);
+  p = rd_neopixel_buf;
+  bytes = rd_neopixel_count * 3;
+
+  cli();
+  while (bytes > 0) {
+    b = *p++;
+    bytes--;
+
+    /* MSB-first bit-bang. The NOP counts target ~13 cycles high for a
+     * 1 bit and ~6 cycles high for a 0 bit at 16 MHz. WS2812 tolerates
+     * +/- 150 ns on each phase. */
+    bit = 8;
+    while (bit > 0) {
+      *port = hi;
+      if (b & 0x80) {
+        __builtin_avr_delay_cycles(8);
+        *port = lo;
+        __builtin_avr_delay_cycles(2);
+      } else {
+        __builtin_avr_delay_cycles(2);
+        *port = lo;
+        __builtin_avr_delay_cycles(8);
+      }
+      b <<= 1;
+      bit--;
+    }
+  }
+  sei();
+
+  /* WS2812 reset: at least 50 us low. The loop overhead already gave
+   * us some margin, but pad just in case. */
+  _delay_us(50);
+}
+
+/* DHT11 / DHT22 temperature + humidity driver.
+ *
+ * Single-wire timing protocol:
+ *   1. MCU pulls line low for >=18 ms (DHT11) or >=1 ms (DHT22)
+ *   2. MCU releases, line floats high via pull-up
+ *   3. Sensor responds with ~80us low + ~80us high
+ *   4. Sensor sends 40 bits: humid_high, humid_low, temp_high, temp_low, checksum
+ *   5. Each bit: ~50us low then high for 26-28us (0) or 70us (1)
+ *
+ * dht_read returns 0 on success, negative on error. Successful reads
+ * stash temperature/humidity * 10 so Ruby callers can format with one
+ * decimal place. The sensor must be polled at most every ~2 seconds.
+ */
+static int16_t rd_dht_temp_x10 = 0;
+static int16_t rd_dht_humid_x10 = 0;
+
+static int rd_dht_wait_for(uint8_t pin, uint8_t state, uint32_t max_us) {
+  uint32_t start = micros();
+  while (digital_read(pin) != state) {
+    if ((micros() - start) > max_us) {
+      return -1;
+    }
+  }
+  return (int)(micros() - start);
+}
+
+int8_t dht_read(uint8_t pin, uint8_t type) {
+  uint8_t data[5];
+  uint32_t bit_start;
+  uint32_t bit_high;
+  uint8_t i;
+  uint8_t sum;
+
+  if (!rd_uno_valid_pin(pin)) {
+    return -1;
+  }
+
+  data[0] = 0;
+  data[1] = 0;
+  data[2] = 0;
+  data[3] = 0;
+  data[4] = 0;
+
+  /* MCU start pulse. */
+  pin_mode(pin, 1);
+  digital_write(pin, 0);
+  if (type == 11) {
+    delay_ms(18);
+  } else {
+    delay_us(1100);
+  }
+  digital_write(pin, 1);
+  pin_mode(pin, 0);
+  delay_us(40);
+
+  /* Sensor response: ~80us low, ~80us high, then first bit starts. */
+  if (rd_dht_wait_for(pin, 0, 200) < 0) return -2;
+  if (rd_dht_wait_for(pin, 1, 200) < 0) return -3;
+  if (rd_dht_wait_for(pin, 0, 200) < 0) return -4;
+
+  for (i = 0; i < 40; i++) {
+    /* Wait for the bit's high pulse to start. */
+    if (rd_dht_wait_for(pin, 1, 200) < 0) return -5;
+
+    bit_start = micros();
+    while (digital_read(pin) == 1) {
+      if ((micros() - bit_start) > 200) return -6;
+    }
+    bit_high = micros() - bit_start;
+
+    data[i >> 3] <<= 1;
+    if (bit_high > 40) {
+      data[i >> 3] |= 1;
+    }
+  }
+
+  sum = (uint8_t)((data[0] + data[1] + data[2] + data[3]) & 0xFF);
+  if (sum != data[4]) {
+    return -7;
+  }
+
+  if (type == 11) {
+    rd_dht_humid_x10 = (int16_t)data[0] * 10;
+    rd_dht_temp_x10 = (int16_t)data[2] * 10;
+  } else {
+    int16_t humid = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+    int16_t temp = (int16_t)(((uint16_t)(data[2] & 0x7F) << 8) | data[3]);
+    if (data[2] & 0x80) {
+      temp = (int16_t)-temp;
+    }
+    rd_dht_humid_x10 = humid;
+    rd_dht_temp_x10 = temp;
+  }
+
+  return 0;
+}
+
+int16_t dht_temperature_x10(void) {
+  return rd_dht_temp_x10;
+}
+
+int16_t dht_humidity_x10(void) {
+  return rd_dht_humid_x10;
+}
+
+/* Dallas 1-Wire bit-bang. The bus is open-drain — the host pulls low
+ * by switching to OUTPUT, releases by switching back to INPUT and
+ * letting the external pull-up restore the line.
+ *
+ * Timing (microseconds):
+ *   Reset:   pull low 480, release, sample after 70 (presence pulse if 0)
+ *   Write 1: pull low 6,  release, total slot 70
+ *   Write 0: pull low 60, release, total slot 70
+ *   Read:    pull low 6,  release, sample after 9, total slot 70
+ */
+static void rd_onewire_low(uint8_t pin) {
+  pin_mode(pin, 1);
+  digital_write(pin, 0);
+}
+
+static void rd_onewire_release(uint8_t pin) {
+  pin_mode(pin, 0);
+}
+
+uint8_t onewire_reset(uint8_t pin) {
+  uint8_t presence;
+  uint8_t sreg = SREG;
+
+  cli();
+  rd_onewire_low(pin);
+  _delay_us(480);
+  rd_onewire_release(pin);
+  _delay_us(70);
+  presence = (digital_read(pin) == 0) ? 1 : 0;
+  SREG = sreg;
+  _delay_us(410);
+  return presence;
+}
+
+static void rd_onewire_write_bit(uint8_t pin, uint8_t bit) {
+  uint8_t sreg = SREG;
+  cli();
+  rd_onewire_low(pin);
+  if (bit) {
+    _delay_us(6);
+    rd_onewire_release(pin);
+    _delay_us(64);
+  } else {
+    _delay_us(60);
+    rd_onewire_release(pin);
+    _delay_us(10);
+  }
+  SREG = sreg;
+}
+
+static uint8_t rd_onewire_read_bit(uint8_t pin) {
+  uint8_t bit;
+  uint8_t sreg = SREG;
+  cli();
+  rd_onewire_low(pin);
+  _delay_us(6);
+  rd_onewire_release(pin);
+  _delay_us(9);
+  bit = (digital_read(pin) == 1) ? 1 : 0;
+  SREG = sreg;
+  _delay_us(55);
+  return bit;
+}
+
+void onewire_write_byte(uint8_t pin, uint8_t value) {
+  uint8_t i;
+  for (i = 0; i < 8; i++) {
+    rd_onewire_write_bit(pin, (uint8_t)(value & 0x01));
+    value >>= 1;
+  }
+}
+
+uint8_t onewire_read_byte(uint8_t pin) {
+  uint8_t value = 0;
+  uint8_t i;
+  for (i = 0; i < 8; i++) {
+    if (rd_onewire_read_bit(pin)) {
+      value |= (uint8_t)(1 << i);
+    }
+  }
+  return value;
+}
+
+/* DS18B20 helpers. Single-device-on-bus convenience: SKIP ROM (0xCC)
+ * skips the address-match step; CONVERT T (0x44) starts the
+ * conversion; READ SCRATCHPAD (0xBE) returns the 9-byte scratchpad.
+ *
+ * Reading is non-blocking once the conversion completes — caller
+ * should sleep ~750 ms (12-bit resolution) after request_temperature
+ * before calling read_temperature_x10.
+ */
+uint8_t ds18b20_request_temperature(uint8_t pin) {
+  if (!onewire_reset(pin)) {
+    return 0;
+  }
+  onewire_write_byte(pin, 0xCC);
+  onewire_write_byte(pin, 0x44);
+  return 1;
+}
+
+int16_t ds18b20_read_temperature_x10(uint8_t pin) {
+  uint8_t raw_lo;
+  uint8_t raw_hi;
+  int16_t raw;
+
+  if (!onewire_reset(pin)) {
+    return 0;
+  }
+  onewire_write_byte(pin, 0xCC);
+  onewire_write_byte(pin, 0xBE);
+  raw_lo = onewire_read_byte(pin);
+  raw_hi = onewire_read_byte(pin);
+
+  raw = (int16_t)(((uint16_t)raw_hi << 8) | raw_lo);
+  /* DS18B20 reports temperature * 16 (1/16 °C resolution).
+   * Convert to tenths-of-degree: temp_x10 = raw * 10 / 16 = raw * 5 / 8. */
+  return (int16_t)(((int32_t)raw * 5) / 8);
+}
+
+/* HD44780 16x2 character LCD in 4-bit mode.
+ *
+ * Wiring assumption: R/W tied to ground (write-only). The host drives
+ * RS, E, and the upper-nibble data lines D4..D7.
+ */
+static uint8_t rd_lcd_rs = 255;
+static uint8_t rd_lcd_en = 255;
+static uint8_t rd_lcd_d4 = 255;
+static uint8_t rd_lcd_d5 = 255;
+static uint8_t rd_lcd_d6 = 255;
+static uint8_t rd_lcd_d7 = 255;
+static uint8_t rd_lcd_cols = 16;
+static uint8_t rd_lcd_rows = 2;
+
+static void rd_lcd_pulse(void) {
+  digital_write(rd_lcd_en, 1);
+  _delay_us(1);
+  digital_write(rd_lcd_en, 0);
+  _delay_us(50);
+}
+
+static void rd_lcd_write_nibble(uint8_t nibble) {
+  digital_write(rd_lcd_d4, (uint8_t)(nibble & 0x01));
+  digital_write(rd_lcd_d5, (uint8_t)((nibble >> 1) & 0x01));
+  digital_write(rd_lcd_d6, (uint8_t)((nibble >> 2) & 0x01));
+  digital_write(rd_lcd_d7, (uint8_t)((nibble >> 3) & 0x01));
+  rd_lcd_pulse();
+}
+
+static void rd_lcd_send(uint8_t value, uint8_t mode) {
+  digital_write(rd_lcd_rs, mode);
+  rd_lcd_write_nibble((uint8_t)(value >> 4));
+  rd_lcd_write_nibble((uint8_t)(value & 0x0F));
+}
+
+static void rd_lcd_command(uint8_t cmd) {
+  rd_lcd_send(cmd, 0);
+}
+
+static void rd_lcd_data(uint8_t value) {
+  rd_lcd_send(value, 1);
+}
+
+void lcd_begin(uint8_t rs, uint8_t en, uint8_t d4, uint8_t d5, uint8_t d6, uint8_t d7, uint8_t cols, uint8_t rows) {
+  rd_lcd_rs = rs;
+  rd_lcd_en = en;
+  rd_lcd_d4 = d4;
+  rd_lcd_d5 = d5;
+  rd_lcd_d6 = d6;
+  rd_lcd_d7 = d7;
+  rd_lcd_cols = cols;
+  rd_lcd_rows = rows;
+
+  pin_mode(rs, 1);
+  pin_mode(en, 1);
+  pin_mode(d4, 1);
+  pin_mode(d5, 1);
+  pin_mode(d6, 1);
+  pin_mode(d7, 1);
+  digital_write(rs, 0);
+  digital_write(en, 0);
+
+  /* Power-up wait. */
+  delay_ms(50);
+
+  /* HD44780 datasheet boot sequence to enter 4-bit mode. */
+  rd_lcd_write_nibble(0x03);
+  delay_ms(5);
+  rd_lcd_write_nibble(0x03);
+  _delay_us(160);
+  rd_lcd_write_nibble(0x03);
+  _delay_us(160);
+  rd_lcd_write_nibble(0x02);
+
+  /* 4-bit, 2-line, 5x8 dots. */
+  rd_lcd_command((uint8_t)(rows > 1 ? 0x28 : 0x20));
+  /* Display on, cursor off, blink off. */
+  rd_lcd_command(0x0C);
+  /* Entry mode: increment, no shift. */
+  rd_lcd_command(0x06);
+  /* Clear. */
+  rd_lcd_command(0x01);
+  delay_ms(2);
+}
+
+void lcd_clear(void) {
+  rd_lcd_command(0x01);
+  delay_ms(2);
+}
+
+void lcd_home(void) {
+  rd_lcd_command(0x02);
+  delay_ms(2);
+}
+
+void lcd_set_cursor(uint8_t col, uint8_t row) {
+  static const uint8_t row_offsets[4] = {0x00, 0x40, 0x14, 0x54};
+  if (row >= rd_lcd_rows) {
+    row = (uint8_t)(rd_lcd_rows - 1);
+  }
+  rd_lcd_command((uint8_t)(0x80 | (col + row_offsets[row])));
+}
+
+void lcd_write_char(uint8_t ch) {
+  rd_lcd_data(ch);
+}
+
+void lcd_print_str(const char *s) {
+  while (*s) {
+    rd_lcd_data((uint8_t)*s);
+    s++;
+  }
+}
+
+void lcd_print_int(int32_t value) {
+  char buf[12];
+  char *p = &buf[11];
+  uint32_t n;
+
+  *p = '\0';
+  if (value < 0) {
+    rd_lcd_data((uint8_t)'-');
+    n = (uint32_t)(-value);
+  } else {
+    n = (uint32_t)value;
+  }
+
+  do {
+    p--;
+    *p = (char)('0' + (n % 10));
+    n /= 10;
+  } while (n > 0);
+
+  lcd_print_str(p);
+}
+
+/* 4-wire stepper motor. Mirrors the bundled Arduino Stepper library:
+ * tracks current step number, step delay (derived from RPM), and the
+ * four-wire coil sequence. Half/four-step driver chips (e.g.
+ * ULN2003 with a 28BYJ-48) work the same way. */
+static uint16_t rd_stepper_steps_per_rev = 200;
+static uint16_t rd_stepper_step_delay_us = 60000;
+static uint8_t rd_stepper_pins[4] = {255, 255, 255, 255};
+static int32_t rd_stepper_step_number = 0;
+
+static void rd_stepper_drive(int32_t step) {
+  uint8_t phase = (uint8_t)(((step % 4) + 4) % 4);
+  /* Standard full-step sequence: A B Aa Bb */
+  static const uint8_t pattern[4][4] = {
+    {1, 0, 1, 0},
+    {0, 1, 1, 0},
+    {0, 1, 0, 1},
+    {1, 0, 0, 1}
+  };
+  uint8_t i;
+  for (i = 0; i < 4; i++) {
+    digital_write(rd_stepper_pins[i], pattern[phase][i]);
+  }
+}
+
+void stepper_begin(uint16_t steps_per_revolution, uint8_t p1, uint8_t p2, uint8_t p3, uint8_t p4) {
+  rd_stepper_steps_per_rev = steps_per_revolution > 0 ? steps_per_revolution : 200;
+  rd_stepper_pins[0] = p1;
+  rd_stepper_pins[1] = p2;
+  rd_stepper_pins[2] = p3;
+  rd_stepper_pins[3] = p4;
+  pin_mode(p1, 1);
+  pin_mode(p2, 1);
+  pin_mode(p3, 1);
+  pin_mode(p4, 1);
+  digital_write(p1, 0);
+  digital_write(p2, 0);
+  digital_write(p3, 0);
+  digital_write(p4, 0);
+  rd_stepper_step_number = 0;
+  rd_stepper_step_delay_us = 60000;
+}
+
+void stepper_set_speed(uint16_t rpm) {
+  if (rpm == 0) {
+    rd_stepper_step_delay_us = 60000;
+    return;
+  }
+  rd_stepper_step_delay_us = (uint16_t)(60UL * 1000UL * 1000UL / (uint32_t)rd_stepper_steps_per_rev / (uint32_t)rpm);
+}
+
+void stepper_step(int16_t steps) {
+  int8_t direction = (steps < 0) ? -1 : 1;
+  uint16_t remaining = (uint16_t)((steps < 0) ? -steps : steps);
+
+  while (remaining > 0) {
+    rd_stepper_step_number += direction;
+    rd_stepper_drive(rd_stepper_step_number);
+
+    /* delay_us only takes uint32, but we keep the value <= ~30ms to
+     * stay inside the 16-bit field for fast iteration. */
+    delay_us((uint32_t)rd_stepper_step_delay_us);
+    remaining--;
+  }
+}
+
+/* Bit-banged software serial.
+ *
+ * Half-duplex: write blocks for the duration of the byte, read polls
+ * the start bit and samples on the bit centers. The bit period is
+ * derived from the baud rate. Common baud rates up to 38400 work
+ * reliably on a 16 MHz UNO; higher rates suffer from interrupt jitter.
+ */
+static uint8_t rd_soft_rx_pin = 255;
+static uint8_t rd_soft_tx_pin = 255;
+static uint16_t rd_soft_bit_period_us = 833; /* 1200 baud default */
+
+void soft_serial_begin(uint8_t rx, uint8_t tx, uint32_t baud) {
+  rd_soft_rx_pin = rx;
+  rd_soft_tx_pin = tx;
+  if (baud == 0) baud = 9600;
+  rd_soft_bit_period_us = (uint16_t)(1000000UL / baud);
+
+  if (tx != 255) {
+    pin_mode(tx, 1);
+    digital_write(tx, 1); /* idle high */
+  }
+  if (rx != 255) {
+    pin_mode(rx, 0);
+  }
+}
+
+void soft_serial_write(uint8_t byte) {
+  uint8_t i;
+  uint8_t sreg;
+
+  if (rd_soft_tx_pin == 255) {
+    return;
+  }
+
+  sreg = SREG;
+  cli();
+  /* Start bit: low. */
+  digital_write(rd_soft_tx_pin, 0);
+  delay_us((uint32_t)rd_soft_bit_period_us);
+  /* 8 data bits, LSB first. */
+  for (i = 0; i < 8; i++) {
+    digital_write(rd_soft_tx_pin, (uint8_t)(byte & 0x01));
+    byte >>= 1;
+    delay_us((uint32_t)rd_soft_bit_period_us);
+  }
+  /* Stop bit: high. */
+  digital_write(rd_soft_tx_pin, 1);
+  delay_us((uint32_t)rd_soft_bit_period_us);
+  SREG = sreg;
+}
+
+void soft_serial_print_str(const char *s) {
+  while (*s) {
+    soft_serial_write((uint8_t)*s);
+    s++;
+  }
+}
+
+int soft_serial_read(void) {
+  uint8_t value = 0;
+  uint8_t i;
+  uint8_t sreg;
+
+  if (rd_soft_rx_pin == 255) {
+    return -1;
+  }
+  if (digital_read(rd_soft_rx_pin) == 1) {
+    return -1; /* line is idle, no start bit waiting */
+  }
+
+  sreg = SREG;
+  cli();
+  /* Skip the start bit and align to bit centers. */
+  delay_us((uint32_t)(rd_soft_bit_period_us + (rd_soft_bit_period_us >> 1)));
+  for (i = 0; i < 8; i++) {
+    if (digital_read(rd_soft_rx_pin)) {
+      value |= (uint8_t)(1 << i);
+    }
+    delay_us((uint32_t)rd_soft_bit_period_us);
+  }
+  SREG = sreg;
+  return (int)value;
+}
+
+/* IR remote receiver — NEC protocol decode.
+ *
+ * Wiring: a TSOP38xx-style demodulating receiver puts the bare command
+ * stream on the pin, idle-high.
+ *
+ * NEC frame:
+ *   9.0 ms low (AGC pulse)
+ *   4.5 ms high
+ *   32 bits, each 0.56 ms low followed by ~0.56 ms (0) or ~1.69 ms (1) high
+ *   final 0.56 ms low stop bit
+ */
+static uint32_t rd_ir_last = 0;
+
+int8_t ir_receive(uint8_t pin, uint32_t timeout_ms) {
+  uint32_t deadline = micros() + timeout_ms * 1000UL;
+  uint32_t bit_start;
+  uint32_t bit_high;
+  uint32_t frame = 0;
+  uint8_t i;
+
+  if (!rd_uno_valid_pin(pin)) {
+    return -1;
+  }
+
+  pin_mode(pin, 0);
+
+  while (digital_read(pin) == 1) {
+    if (micros() > deadline) return -2;
+  }
+
+  bit_start = micros();
+  while (digital_read(pin) == 0) {
+    if ((micros() - bit_start) > 12000) return -3;
+  }
+  if ((micros() - bit_start) < 7000) return -4;
+
+  bit_start = micros();
+  while (digital_read(pin) == 1) {
+    if ((micros() - bit_start) > 6000) return -5;
+  }
+  if ((micros() - bit_start) < 3500) return -6;
+
+  for (i = 0; i < 32; i++) {
+    bit_start = micros();
+    while (digital_read(pin) == 0) {
+      if ((micros() - bit_start) > 1500) return -7;
+    }
+    bit_start = micros();
+    while (digital_read(pin) == 1) {
+      if ((micros() - bit_start) > 3000) return -8;
+    }
+    bit_high = micros() - bit_start;
+    frame >>= 1;
+    if (bit_high > 1000) {
+      frame |= 0x80000000UL;
+    }
+  }
+
+  rd_ir_last = frame;
+  return 0;
+}
+
+uint32_t ir_command(void) {
+  return rd_ir_last;
+}
+
 void serial_write(uint8_t value) {
   while (!(UCSR0A & (uint8_t)(1 << UDRE0))) {
   }

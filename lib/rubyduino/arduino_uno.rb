@@ -199,6 +199,34 @@ module ArduinoUNO
   ffi_func :servo_read_microseconds, [], :uint16
   ffi_func :servo_attached, [], :uint8
   ffi_func :arduino_yield, [], :void
+  ffi_func :neopixel_begin, [:uint8, :uint16], :void
+  ffi_func :neopixel_set_pixel, [:uint16, :uint8, :uint8, :uint8], :void
+  ffi_func :neopixel_clear, [], :void
+  ffi_func :neopixel_show, [], :void
+  ffi_func :dht_read, [:uint8, :uint8], :int8
+  ffi_func :dht_temperature_x10, [], :int16
+  ffi_func :dht_humidity_x10, [], :int16
+  ffi_func :onewire_reset, [:uint8], :uint8
+  ffi_func :onewire_write_byte, [:uint8, :uint8], :void
+  ffi_func :onewire_read_byte, [:uint8], :uint8
+  ffi_func :ds18b20_request_temperature, [:uint8], :uint8
+  ffi_func :ds18b20_read_temperature_x10, [:uint8], :int16
+  ffi_func :lcd_begin, [:uint8, :uint8, :uint8, :uint8, :uint8, :uint8, :uint8, :uint8], :void
+  ffi_func :lcd_clear, [], :void
+  ffi_func :lcd_home, [], :void
+  ffi_func :lcd_set_cursor, [:uint8, :uint8], :void
+  ffi_func :lcd_write_char, [:uint8], :void
+  ffi_func :lcd_print_str, [:str], :void
+  ffi_func :lcd_print_int, [:int32], :void
+  ffi_func :stepper_begin, [:uint16, :uint8, :uint8, :uint8, :uint8], :void
+  ffi_func :stepper_set_speed, [:uint16], :void
+  ffi_func :stepper_step, [:int16], :void
+  ffi_func :soft_serial_begin, [:uint8, :uint8, :uint32], :void
+  ffi_func :soft_serial_write, [:uint8], :void
+  ffi_func :soft_serial_print_str, [:str], :void
+  ffi_func :soft_serial_read, [], :int
+  ffi_func :ir_receive, [:uint8, :uint32], :int8
+  ffi_func :ir_command, [], :uint32
 end
 
 def pin_mode(pin, mode)
@@ -759,6 +787,143 @@ end
 
 def arduino_yield
   ArduinoUNO.arduino_yield
+end
+
+def neopixel_begin(pin, num_pixels)
+  ArduinoUNO.neopixel_begin(pin, num_pixels)
+end
+
+def neopixel_set_pixel(index, r, g, b)
+  ArduinoUNO.neopixel_set_pixel(index, r, g, b)
+end
+
+def neopixel_clear
+  ArduinoUNO.neopixel_clear
+end
+
+def neopixel_show
+  ArduinoUNO.neopixel_show
+end
+
+# DHT type constants. The DHT22 is also known as AM2302/RHT03.
+DHT11 = 11
+DHT22 = 22
+
+def dht_read(pin, type = DHT22)
+  ArduinoUNO.dht_read(pin, type)
+end
+
+def dht_read?(pin, type = DHT22)
+  ArduinoUNO.dht_read(pin, type) == 0
+end
+
+def dht_temperature_x10
+  ArduinoUNO.dht_temperature_x10
+end
+
+def dht_humidity_x10
+  ArduinoUNO.dht_humidity_x10
+end
+
+def onewire_reset(pin)
+  ArduinoUNO.onewire_reset(pin)
+end
+
+def onewire_reset?(pin)
+  ArduinoUNO.onewire_reset(pin) == 1
+end
+
+def onewire_write_byte(pin, value)
+  ArduinoUNO.onewire_write_byte(pin, value)
+end
+
+def onewire_read_byte(pin)
+  ArduinoUNO.onewire_read_byte(pin)
+end
+
+def ds18b20_request_temperature(pin)
+  ArduinoUNO.ds18b20_request_temperature(pin)
+end
+
+def ds18b20_read_temperature_x10(pin)
+  ArduinoUNO.ds18b20_read_temperature_x10(pin)
+end
+
+# 16x2 character LCD on a HD44780 controller, wired in 4-bit mode.
+# Pass the RS, E, and four data pins; pass cols/rows to size the display.
+def lcd_begin(rs, en, d4, d5, d6, d7, cols = 16, rows = 2)
+  ArduinoUNO.lcd_begin(rs, en, d4, d5, d6, d7, cols, rows)
+end
+
+def lcd_clear
+  ArduinoUNO.lcd_clear
+end
+
+def lcd_home
+  ArduinoUNO.lcd_home
+end
+
+def lcd_set_cursor(col, row)
+  ArduinoUNO.lcd_set_cursor(col, row)
+end
+
+def lcd_write_char(char)
+  ArduinoUNO.lcd_write_char(char)
+end
+
+def lcd_print_str(str)
+  ArduinoUNO.lcd_print_str(str)
+end
+
+def lcd_print_int(value)
+  ArduinoUNO.lcd_print_int(value)
+end
+
+# 4-wire stepper motor (full-step mode). Pass the steps-per-revolution and
+# four GPIO pins wired to the coil drivers.
+def stepper_begin(steps_per_revolution, p1, p2, p3, p4)
+  ArduinoUNO.stepper_begin(steps_per_revolution, p1, p2, p3, p4)
+end
+
+def stepper_set_speed(rpm)
+  ArduinoUNO.stepper_set_speed(rpm)
+end
+
+def stepper_step(steps)
+  ArduinoUNO.stepper_step(steps)
+end
+
+# Bit-banged software serial. Single instance, half-duplex. Useful for
+# talking to GPS modules, ESP-01, GSM modules, and similar peripherals
+# while the hardware UART is busy.
+def soft_serial_begin(rx_pin, tx_pin, baud)
+  ArduinoUNO.soft_serial_begin(rx_pin, tx_pin, baud)
+end
+
+def soft_serial_write(byte)
+  ArduinoUNO.soft_serial_write(byte)
+end
+
+def soft_serial_print_str(s)
+  ArduinoUNO.soft_serial_print_str(s)
+end
+
+def soft_serial_read
+  ArduinoUNO.soft_serial_read
+end
+
+# IR remote receiver (NEC protocol). Returns 0 on success, negative on
+# timeout/parse error. Pair with `ir_command` to read the decoded command.
+def ir_receive(pin, timeout_ms = 100)
+  ArduinoUNO.ir_receive(pin, timeout_ms)
+end
+
+def ir_receive?(pin, timeout_ms = 100)
+  ArduinoUNO.ir_receive(pin, timeout_ms) == 0
+end
+
+def ir_command
+  ArduinoUNO.ir_command
 end
 
 # ---------------------------------------------------------------------------
