@@ -300,3 +300,7 @@ end
 def no_tone(pin)
   ArduinoUNO.no_tone(pin)
 end
+
+def pulse_in_long(pin, value, timeout_us = 1_000_000)
+  ArduinoUNO.pulse_in_timeout(pin, value, timeout_us)
+end
