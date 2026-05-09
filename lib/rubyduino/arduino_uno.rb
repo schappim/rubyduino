@@ -139,6 +139,13 @@ module ArduinoUNO
   ffi_func :wire_request_from, [:uint8, :uint8, :uint8], :uint8
   ffi_func :wire_available, [], :int
   ffi_func :wire_read, [], :int
+  ffi_func :servo_attach, [:uint8], :void
+  ffi_func :servo_detach, [], :void
+  ffi_func :servo_write, [:uint8], :void
+  ffi_func :servo_write_microseconds, [:uint16], :void
+  ffi_func :servo_read, [], :uint8
+  ffi_func :servo_read_microseconds, [], :uint16
+  ffi_func :servo_attached, [], :uint8
 end
 
 def pin_mode(pin, mode)
@@ -571,4 +578,36 @@ end
 
 def wire_read
   ArduinoUNO.wire_read
+end
+
+def servo_attach(pin)
+  ArduinoUNO.servo_attach(pin)
+end
+
+def servo_detach
+  ArduinoUNO.servo_detach
+end
+
+def servo_write(angle)
+  ArduinoUNO.servo_write(angle)
+end
+
+def servo_write_microseconds(us)
+  ArduinoUNO.servo_write_microseconds(us)
+end
+
+def servo_read
+  ArduinoUNO.servo_read
+end
+
+def servo_read_microseconds
+  ArduinoUNO.servo_read_microseconds
+end
+
+def servo_attached
+  ArduinoUNO.servo_attached
+end
+
+def servo_attached?
+  ArduinoUNO.servo_attached == 1
 end

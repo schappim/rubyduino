@@ -29,6 +29,19 @@ typedef struct {
 
 static int sp_last_status = 0;
 
+/* Forward declarations so that intra-file callers see proper prototypes
+ * regardless of definition order. */
+void serial_write(uint8_t value);
+void serial_print_str(const char *value);
+void serial_print_int(int value);
+int serial_read(void);
+int serial_peek(void);
+int digital_write(uint8_t pin, uint8_t value);
+int digital_read(uint8_t pin);
+int pin_mode(uint8_t pin, uint8_t mode);
+uint32_t millis(void);
+int32_t map_value(int32_t value, int32_t from_low, int32_t from_high, int32_t to_low, int32_t to_high);
+
 #define time(value) ((mrb_int)1)
 
 #define SP_GC_SAVE() ((void)0)
@@ -1098,6 +1111,88 @@ int wire_read(void) {
     return -1;
   }
   return rd_wire_rx_buf[rd_wire_rx_pos++];
+}
+
+#define RD_SERVO_MIN_US 544
+#define RD_SERVO_MAX_US 2400
+
+static int8_t rd_servo_pin = -1;
+static uint16_t rd_servo_pulse_us = 1500;
+static uint8_t rd_servo_phase = 0;
+
+ISR(TIMER1_COMPA_vect) {
+  if (rd_servo_pin < 0) {
+    return;
+  }
+  if (rd_servo_phase == 1) {
+    digital_write((uint8_t)rd_servo_pin, 0);
+    OCR1A = (uint16_t)((uint32_t)(20000UL - rd_servo_pulse_us) * 2UL);
+    rd_servo_phase = 0;
+  } else {
+    digital_write((uint8_t)rd_servo_pin, 1);
+    OCR1A = (uint16_t)((uint32_t)rd_servo_pulse_us * 2UL);
+    rd_servo_phase = 1;
+  }
+  TCNT1 = 0;
+}
+
+void servo_attach(uint8_t pin) {
+  if (!rd_uno_valid_pin(pin)) {
+    return;
+  }
+  pin_mode(pin, 1);
+  cli();
+  rd_servo_pin = (int8_t)pin;
+  rd_servo_pulse_us = 1500;
+  rd_servo_phase = 0;
+  TCCR1A = 0;
+  TCCR1B = (uint8_t)((1 << WGM12) | (1 << CS11));
+  OCR1A = (uint16_t)(rd_servo_pulse_us * 2UL);
+  TCNT1 = 0;
+  TIFR1 = (uint8_t)(1 << OCF1A);
+  TIMSK1 |= (uint8_t)(1 << OCIE1A);
+  sei();
+}
+
+void servo_detach(void) {
+  cli();
+  TIMSK1 &= (uint8_t)~(1 << OCIE1A);
+  if (rd_servo_pin >= 0) {
+    digital_write((uint8_t)rd_servo_pin, 0);
+  }
+  rd_servo_pin = -1;
+  sei();
+}
+
+void servo_write_microseconds(uint16_t us) {
+  if (us < RD_SERVO_MIN_US) {
+    us = RD_SERVO_MIN_US;
+  }
+  if (us > RD_SERVO_MAX_US) {
+    us = RD_SERVO_MAX_US;
+  }
+  cli();
+  rd_servo_pulse_us = us;
+  sei();
+}
+
+void servo_write(uint8_t angle) {
+  if (angle > 180) {
+    angle = 180;
+  }
+  servo_write_microseconds((uint16_t)map_value((int32_t)angle, 0, 180, RD_SERVO_MIN_US, RD_SERVO_MAX_US));
+}
+
+uint16_t servo_read_microseconds(void) {
+  return rd_servo_pulse_us;
+}
+
+uint8_t servo_read(void) {
+  return (uint8_t)map_value((int32_t)rd_servo_pulse_us, RD_SERVO_MIN_US, RD_SERVO_MAX_US, 0, 180);
+}
+
+uint8_t servo_attached(void) {
+  return (rd_servo_pin >= 0) ? 1 : 0;
 }
 
 void serial_write(uint8_t value) {
