@@ -42,7 +42,58 @@ module ArduinoUNO
   SPI_CLOCK_DIV2 = 4
   SPI_CLOCK_DIV8 = 5
   SPI_CLOCK_DIV32 = 6
+end
 
+# Ruby-style alias module. ArduinoUNO is the original Arduino spelling and
+# stays the canonical home for the FFI bindings. ArduinoUno mirrors every
+# constant so sketches can use the more Ruby-idiomatic capitalization.
+module ArduinoUno
+  LOW = 0
+  HIGH = 1
+
+  INPUT = 0
+  OUTPUT = 1
+  INPUT_PULLUP = 2
+
+  A0 = 14
+  A1 = 15
+  A2 = 16
+  A3 = 17
+  A4 = 18
+  A5 = 19
+
+  LED_BUILTIN = 13
+  LSBFIRST = 0
+  MSBFIRST = 1
+
+  INT_LOW = 0
+  INT_CHANGE = 1
+  INT_FALLING = 2
+  INT_RISING = 3
+
+  AREF_EXTERNAL = 0
+  AREF_DEFAULT = 1
+  AREF_INTERNAL = 3
+
+  BIN = 2
+  OCT = 8
+  DEC = 10
+  HEX = 16
+
+  SPI_MODE0 = 0
+  SPI_MODE1 = 1
+  SPI_MODE2 = 2
+  SPI_MODE3 = 3
+  SPI_CLOCK_DIV4 = 0
+  SPI_CLOCK_DIV16 = 1
+  SPI_CLOCK_DIV64 = 2
+  SPI_CLOCK_DIV128 = 3
+  SPI_CLOCK_DIV2 = 4
+  SPI_CLOCK_DIV8 = 5
+  SPI_CLOCK_DIV32 = 6
+end
+
+module ArduinoUNO
   ffi_func :pin_mode, [:uint8, :uint8], :int
   ffi_func :digital_write, [:uint8, :uint8], :int
   ffi_func :digital_read, [:uint8], :int
@@ -232,6 +283,12 @@ end
 
 def no_interrupts
   ArduinoUNO.no_interrupts
+end
+
+def without_interrupts
+  ArduinoUNO.no_interrupts
+  yield
+  ArduinoUNO.interrupts
 end
 
 def bit(n)
@@ -702,4 +759,112 @@ end
 
 def arduino_yield
   ArduinoUNO.arduino_yield
+end
+
+# ---------------------------------------------------------------------------
+# Ruby-style module facades.
+#
+# Each facade is a thin module-method wrapper around the snake_case top-level
+# methods above, giving sketches a more namespaced feel:
+#
+#   Pin.mode(13, ArduinoUno::OUTPUT)
+#   Serial.begin(9600); Serial.println(42)
+#   Eeprom.write(0, 0xAB); v = Eeprom.read(0)
+#   Spi.begin; r = Spi.transfer(0x9F)
+#   Wire.begin; Wire.transmit(0x68); Wire.write(0x6B); Wire.end_transmission
+#   Servo.attach(9); Servo.angle = 90
+#
+# The Arduino-named top-level functions remain the canonical compatibility
+# layer for porting .ino sketches.
+#
+# Spinel monomorphizes module methods, so polymorphic-looking helpers (e.g.
+# a single Serial.print used with both String and Integer) need to live at
+# top level via the codegen — Serial.print_str / print_int / print_hex etc.
+# split those out so each facade method has a single static type.
+# ---------------------------------------------------------------------------
+
+module Pin
+  def self.mode(pin, mode); pin_mode(pin, mode); end
+  def self.write(pin, value); digital_write(pin, value); end
+  def self.read(pin); digital_read(pin); end
+  def self.high(pin); digital_write(pin, 1); end
+  def self.low(pin); digital_write(pin, 0); end
+  def self.high?(pin); digital_read(pin) == 1; end
+  def self.low?(pin); digital_read(pin) == 0; end
+  def self.analog_read(pin); analog_read(pin); end
+  def self.analog_write(pin, value); analog_write(pin, value); end
+  def self.pulse_in(pin, value, timeout_us = 1_000_000); pulse_in_timeout(pin, value, timeout_us); end
+end
+
+module Serial
+  def self.begin(baud); serial_begin(baud); end
+  def self.end; serial_end; end
+  def self.available; serial_available; end
+  def self.available?; serial_available > 0; end
+  def self.available_for_write; serial_available_for_write; end
+  def self.read; serial_read; end
+  def self.read_byte_timeout; serial_read_byte_timeout; end
+  def self.peek; serial_peek; end
+  def self.write(byte); serial_write(byte); end
+  def self.flush; serial_flush; end
+  def self.timeout; serial_get_timeout; end
+  def self.timeout=(ms); serial_set_timeout(ms); end
+  def self.parse_int; serial_parse_int; end
+  def self.parse_float; serial_parse_float; end
+  def self.find?(target); serial_find?(target); end
+  def self.find_until?(target, terminator); serial_find_until?(target, terminator); end
+  def self.print_str(s); serial_print_str(s); end
+  def self.print_int(n); serial_print_int(n); end
+  def self.print_hex(n); serial_print_hex(n); end
+  def self.print_bin(n); serial_print_bin(n); end
+  def self.print_oct(n); serial_print_oct(n); end
+  def self.print_float(f, decimals); serial_print_float(f, decimals); end
+  def self.println_str(s); serial_println_str(s); end
+  def self.println_int(n); serial_println_int(n); end
+  def self.println_hex(n); serial_println_hex(n); end
+  def self.println_bin(n); serial_println_bin(n); end
+  def self.println_oct(n); serial_println_oct(n); end
+  def self.println_float(f, decimals); serial_println_float(f, decimals); end
+end
+
+module Eeprom
+  def self.length; eeprom_length; end
+  def self.read(addr); eeprom_read(addr); end
+  def self.write(addr, value); eeprom_write(addr, value); end
+  def self.update(addr, value); eeprom_update(addr, value); end
+  def self.read_int(addr); eeprom_read_int(addr); end
+  def self.write_int(addr, value); eeprom_write_int(addr, value); end
+end
+
+module Spi
+  def self.begin; spi_begin; end
+  def self.end; spi_end; end
+  def self.bit_order=(order); spi_set_bit_order(order); end
+  def self.clock_divider=(div); spi_set_clock_divider(div); end
+  def self.data_mode=(mode); spi_set_data_mode(mode); end
+  def self.transfer(byte); spi_transfer(byte); end
+  def self.transfer16(word); spi_transfer16(word); end
+end
+
+module Wire
+  def self.begin; wire_begin; end
+  def self.end; wire_end; end
+  def self.clock=(hz); wire_set_clock(hz); end
+  def self.transmit(addr); wire_begin_transmission(addr); end
+  def self.write(byte); wire_write(byte); end
+  def self.end_transmission(stop = 1); wire_end_transmission(stop); end
+  def self.request_from(addr, count, stop = 1); wire_request_from(addr, count, stop); end
+  def self.available; wire_available; end
+  def self.available?; wire_available > 0; end
+  def self.read; wire_read; end
+end
+
+module Servo
+  def self.attach(pin); servo_attach(pin); end
+  def self.detach; servo_detach; end
+  def self.angle; servo_read; end
+  def self.angle=(degrees); servo_write(degrees); end
+  def self.microseconds; servo_read_microseconds; end
+  def self.microseconds=(us); servo_write_microseconds(us); end
+  def self.attached?; servo_attached == 1; end
 end
